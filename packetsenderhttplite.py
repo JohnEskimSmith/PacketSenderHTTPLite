@@ -794,6 +794,18 @@ async def work_with_queue(queue_results, count):
 
     if block:
         await worker_group(block)
+    # region dev
+    if args.statistics:
+        stop_time = datetime.datetime.now()
+        _delta_time = stop_time - start_time
+        duration_time_sec = _delta_time.total_seconds()
+        statistics = {'duration': duration_time_sec,
+                      'valid targets': count_input,
+                      'success': count_good,
+                      'fails': count_error}
+        async with aiofiles.open('/dev/stdout', mode='wb') as stats:
+            await stats.write(ujson.dumps(statistics).encode('utf-8') + b'\n')
+    # endregion
 
 
 async def read_input_file(queue_results, settings, path_to_file):
@@ -964,13 +976,3 @@ if __name__ == "__main__":
     consumer_coro = work_with_queue(queue_results, count_cor)
     loop.run_until_complete(asyncio.gather(producer_coro, consumer_coro))
     loop.close()
-
-    stop_time = datetime.datetime.now()
-    _delta_time = stop_time-start_time
-    duration_time_sec = _delta_time.total_seconds()
-    if args.statistics:
-        statistics = {'duration': duration_time_sec,
-                      'valid targets': count_input,
-                      'success': count_good,
-                      'fails': count_error}
-        print(ujson.dumps(statistics))
