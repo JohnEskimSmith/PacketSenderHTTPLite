@@ -22,11 +22,7 @@ import copy
 import os
 from hashlib import sha256, sha1, md5
 import re
-import aiodns
 import uvloop
-asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
-
-
 from typing import (Any,
                     Callable,
                     Iterable,
@@ -578,10 +574,8 @@ class WrappedResponseClass(ClientResponse):
 
     async def start(self, connection, read_until_eof=False):
         try:
-            self._ssl_prot = connection.transport._ssl_protocol
-            self._ssl_prot_extra = self._ssl_prot._extra
-            if self._ssl_prot_extra:
-                self._peer_cert = self._ssl_prot_extra['ssl_object'].getpeercert(binary_form=True)
+            self._ssl_prot = connection.transport.get_extra_info('ssl_object')
+            self._peer_cert = self._ssl_prot.getpeercert(binary_form=True)
         except Exception as e:
             print(str(e))
         finally:
@@ -961,12 +955,11 @@ if __name__ == "__main__":
     count_good = 0
     count_error = 0
     start_time = datetime.datetime.now()
-
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     loop = asyncio.get_event_loop()
     queue_results = asyncio.Queue()
 
     s = datetime.datetime.now()
-    resolver = aiodns.DNSResolver(loop=loop)
     producer_coro = method_create_targets(queue_results, settings, path_to_file_targets)
     consumer_coro = work_with_queue(queue_results, count_cor)
     loop.run_until_complete(asyncio.gather(producer_coro, consumer_coro))
