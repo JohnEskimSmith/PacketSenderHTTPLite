@@ -577,7 +577,7 @@ class WrappedResponseClass(ClientResponse):
             self._ssl_prot = connection.transport.get_extra_info('ssl_object')
             self._peer_cert = self._ssl_prot.getpeercert(binary_form=True)
         except Exception as e:
-            print(str(e))
+            pass
         finally:
             bs = super(WrappedResponseClass, self)
             return await bs.start(connection)
@@ -915,11 +915,11 @@ if __name__ == "__main__":
         pass # TODO read from yaml
     else:
         # region parser ARGs
+        # в method_create_targets - метод, которые или читает из stdin или из файла
         if not args.input_file:
-            method_create_targets = read_input_stdin # set method - async read from stdin (str)
+            method_create_targets = read_input_stdin  # set method - async read from stdin (str)
         else:
-            method_create_targets = read_input_file # set method - async read from file(txt, str)
-
+            method_create_targets = read_input_file  # set method - async read from file(txt, str)
             path_to_file_targets = args.input_file
             if not checkfile(path_to_file_targets):
                 print(f'ERROR: file not found: {path_to_file_targets}')
