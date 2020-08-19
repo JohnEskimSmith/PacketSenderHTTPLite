@@ -713,11 +713,11 @@ async def worker_single(target):
             if len(result['ip']) == 0:
                 _ip = return_ip_from_deep(session, response)
                 result['ip'] = _ip
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.02)
         await session.close()
     except Exception as e:
         result = create_template_error(target, str(e))
-        await asyncio.sleep(0.05)
+        await asyncio.sleep(0.02)
         await session.close()
     return result
 
@@ -730,7 +730,7 @@ async def worker_group(block: list):
         task = asyncio.ensure_future(worker_single(target))
         tasks.append(task)
     responses = await asyncio.gather(*tasks)  # all response bodies in this variable - responses
-    await asyncio.sleep(0.05)
+    await asyncio.sleep(0.02)
     if responses:
         method_write_result = write_to_stdout
         if mode_write == 'a':
@@ -790,7 +790,7 @@ async def work_with_queue(queue_results, count):
                 await worker_group(block)
                 del block
                 block = []
-                await asyncio.sleep(0.2)  # magic number :)
+                await asyncio.sleep(0.02)  # magic number :)
 
     if block:
         await worker_group(block)
