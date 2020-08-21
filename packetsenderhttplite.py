@@ -23,6 +23,8 @@ import os
 from hashlib import sha256, sha1, md5
 import re
 import uvloop
+asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+
 from typing import (Any,
                     Callable,
                     Iterable,
@@ -32,6 +34,7 @@ from typing import (Any,
                     BinaryIO,
                     TextIO,
                     )
+
 
 def check_domain(value) -> bool:
     """
@@ -663,7 +666,9 @@ async def make_document_from_response(response, target) -> dict:
     return result_to_output
 
 
-async def worker_single(target):
+async def worker_single(target: NamedTuple,
+                        semaphore: asyncio.Semaphore,
+                        queue_out: asyncio.Queue) -> dict:
 
     def return_ip_from_deep(sess, response) -> str:
         try:
@@ -683,77 +688,62 @@ async def worker_single(target):
             pass
         return ''
 
-    result = None
-    timeout = ClientTimeout(target.timeout)
-    if target.sslcheck:
-        conn = TCPConnector(ssl=False, limit_per_host=1)
-        session = ClientSession(timeout=timeout, connector=conn,  response_class=WrappedResponseClass)
-    else:
-        session = ClientSession(timeout=timeout)
-    try:
-
-        # files = {'file': open('payload', 'rb')}
-        # async with session.request(target.method,
-        #                            target.url,
-        #                            allow_redirects=target.allow_redirects,
-        #                            data=files) as response:
-        # https: // docs.aiohttp.org / en / stable / client_quickstart.html  # post-a-multipart-encoded-file
-        async with session.request(target.method,
-                                   target.url,
-                                   headers=target.headers,
-                                   allow_redirects=target.allow_redirects,
-                                   data=target.payload,
-                                   timeout=timeout) as response:
-            result = await make_document_from_response(response, target)
-            # какое-то безумие с функцией return_ip_from_deep, автор aiohttp говорит, что просто так до ip сервера
-            # не добраться
-            # link: https://github.com/aio-libs/aiohttp/issues/4249
-            # но есть моменты....
-            # в функции return_ip_from_deep через какую-то "жопу" добираемся до ip - это не дело, но пока оставим так
-            if len(result['ip']) == 0:
-                _ip = return_ip_from_deep(session, response)
-                result['ip'] = _ip
-        await asyncio.sleep(0.02)
-        await session.close()
-    except Exception as e:
-        result = create_template_error(target, str(e))
-        await asyncio.sleep(0.02)
-        await session.close()
-    return result
-
-
-async def worker_group(block: list):
     global count_good
     global count_error
-    tasks = []
-    for target in block:
-        task = asyncio.ensure_future(worker_single(target))
-        tasks.append(task)
-    responses = await asyncio.gather(*tasks)  # all response bodies in this variable - responses
-    await asyncio.sleep(0.02)
-    if responses:
-        method_write_result = write_to_stdout
-        if mode_write == 'a':
-            method_write_result = write_to_file
-        async with aiofiles.open(output_file, mode=mode_write) as file_with_results:
-            for dict_line in responses:
-                if dict_line:
-                    success = return_value_from_dict(dict_line, "data.http.status")
+    async with semaphore:
+        result = None
+        timeout = ClientTimeout(target.timeout)
+        if target.sslcheck:
+            conn = TCPConnector(ssl=False, limit_per_host=1)
+            session = ClientSession(timeout=timeout, connector=conn,  response_class=WrappedResponseClass)
+        else:
+            session = ClientSession(timeout=timeout)
+        try:
+
+            # files = {'file': open('payload', 'rb')}
+            # async with session.request(target.method,
+            #                            target.url,
+            #                            allow_redirects=target.allow_redirects,
+            #                            data=files) as response:
+            # https: // docs.aiohttp.org / en / stable / client_quickstart.html  # post-a-multipart-encoded-file
+            async with session.request(target.method,
+                                       target.url,
+                                       headers=target.headers,
+                                       allow_redirects=target.allow_redirects,
+                                       data=target.payload,
+                                       timeout=timeout) as response:
+                result = await make_document_from_response(response, target)
+                # какое-то безумие с функцией return_ip_from_deep, автор aiohttp говорит, что просто так до ip сервера
+                # не добраться
+                # link: https://github.com/aio-libs/aiohttp/issues/4249
+                # но есть моменты....
+                # в функции return_ip_from_deep через какую-то "жопу" добираемся до ip - это не дело, но пока оставим так
+                if len(result['ip']) == 0:
+                    _ip = return_ip_from_deep(session, response)
+                    result['ip'] = _ip
+            await asyncio.sleep(0.02)
+            await session.close()
+        except Exception as e:
+            result = create_template_error(target, str(e))
+            await asyncio.sleep(0.02)
+            await session.close()
+        if result:
+            success = return_value_from_dict(result, "data.http.status")
+            if success == "success":
+                count_good += 1
+            else:
+                count_error += 1
+            line = None
+            try:
+                if args.show_only_success:
                     if success == "success":
-                        count_good += 1
-                    else:
-                        count_error += 1
-                    line = None
-                    try:
-                        if args.show_only_success:
-                            if success == "success":
-                                line = ujson.dumps(dict_line)
-                        else:
-                            line = ujson.dumps(dict_line)
-                    except Exception as e:
-                        pass
-                    if line:
-                        await method_write_result(file_with_results, line)
+                        line = ujson.dumps(result)
+                else:
+                    line = ujson.dumps(result)
+            except Exception as e:
+                pass
+            if line:
+                await queue_out.put(line)
 
 
 async def write_to_stdout(object_file: BinaryIO,
@@ -771,29 +761,74 @@ async def write_to_file(object_file: TextIO,
         pass
 
 
-async def work_with_queue(queue_results, count):
+async def work_with_queue_tasks(queue_results: asyncio.Queue,
+                                queue_prints: asyncio.Queue) -> None:
+    """
 
-    count_elements = 0
-    block = []
-
+    :param queue_results:
+    :param queue_prints:
+    :return:
+    """
     while True:
         # wait for an item from the "start_application"
-        item = await queue_results.get()
+        task = await queue_results.get()
+        if task == b"check for end":
+            await queue_prints.put(b"check for end")
+            break
+        if task:
+            await task
+
+    # global count_input
+    # global count_good
+    # global count_error
+
+
+async def work_with_queue(queue_with_input: asyncio.Queue,
+                          queue_with_tasks: asyncio.Queue,
+                          queue_out: asyncio.Queue,
+                          count: int) -> None:
+    """
+
+    :param queue_with_input:
+    :param queue_with_tasks:
+    :param queue_out:
+    :param count:
+    :return:
+    """
+    semaphore = asyncio.Semaphore(count)
+    while True:
+        # wait for an item from the "start_application"
+        item = await queue_with_input.get()
         if item == b"check for end":
-            # TODO send statistics
+            await queue_with_tasks.put(b"check for end")
             break
         if item:
-            block.append(item)
-            count_elements += 1
-            if count_elements % (int(count)) == 0:
-                # TODO rethink structures
-                await worker_group(block)
-                del block
-                block = []
-                await asyncio.sleep(0.02)  # magic number :)
+            task = asyncio.create_task(worker_single(item, semaphore, queue_out))
+            await queue_with_tasks.put(task)
 
-    if block:
-        await worker_group(block)
+
+async def work_with_queue_result(queue_out: asyncio.Queue,
+                                 filename,
+                                 mode_write) -> None:
+    """
+
+    :param queue_out:
+    :param filename:
+    :param mode_write:
+    :return:
+    """
+    if mode_write == 'a':
+        method_write_result = write_to_file
+    else:
+        method_write_result = write_to_stdout
+    async with aiofiles.open(filename, mode=mode_write) as file_with_results:
+        while True:
+            line = await queue_out.get()
+            if line == b"check for end":
+                break
+            if line:
+                await method_write_result(file_with_results, line)
+    await asyncio.sleep(0.5)
     # region dev
     if args.statistics:
         stop_time = datetime.datetime.now()
@@ -808,7 +843,9 @@ async def work_with_queue(queue_results, count):
     # endregion
 
 
-async def read_input_file(queue_results, settings, path_to_file):
+async def read_input_file(queue_input: asyncio.Queue,
+                          settings: dict,
+                          path_to_file: str) -> None:
     global count_input
     async with aiofiles.open(path_to_file, mode='rt') as f: # read str
         async for line in f:
@@ -821,11 +858,13 @@ async def read_input_file(queue_results, settings, path_to_file):
             if targets:
                 for target in targets:
                     count_input += 1 # statistics
-                    queue_results.put_nowait(target)
-    queue_results.put_nowait(b"check for end")
+                    queue_input.put_nowait(target)
+    await queue_input.put(b"check for end")
 
 
-async def read_input_stdin(queue_results, settings, path_to_file=None):
+async def read_input_stdin(queue_input: asyncio.Queue,
+                           settings: dict,
+                           path_to_file: str = None) -> None:
     global count_input
     while True:
         try:
@@ -839,9 +878,9 @@ async def read_input_stdin(queue_results, settings, path_to_file=None):
             if targets:
                 for target in targets:
                     count_input += 1  # statistics
-                    queue_results.put_nowait(target)
+                    queue_input.put_nowait(target)
         except EOFError:
-            queue_results.put_nowait(b"check for end")
+            await queue_input.put(b"check for end")
             break
 
 
@@ -967,12 +1006,15 @@ if __name__ == "__main__":
     count_good = 0
     count_error = 0
     start_time = datetime.datetime.now()
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     loop = asyncio.get_event_loop()
+    # region Queues
+    queue_input = asyncio.Queue()
     queue_results = asyncio.Queue()
-
-    s = datetime.datetime.now()
-    producer_coro = method_create_targets(queue_results, settings, path_to_file_targets)
-    consumer_coro = work_with_queue(queue_results, count_cor)
-    loop.run_until_complete(asyncio.gather(producer_coro, consumer_coro))
+    queue_prints = asyncio.Queue()
+    # endregion
+    read_input = method_create_targets(queue_input, settings, path_to_file_targets)  # create targets and put to queue_input
+    create_tasks = work_with_queue(queue_input, queue_results, queue_prints, count_cor)  # put Task with target to queue_results for execution
+    execute_tasks = work_with_queue_tasks(queue_results, queue_prints)  # read Tasks from from queue_results and exec it
+    print_output = work_with_queue_result(queue_prints, output_file, mode_write)  # read results from queue_prints and out(write, print) it
+    loop.run_until_complete(asyncio.gather(read_input, create_tasks, execute_tasks, print_output))
     loop.close()
