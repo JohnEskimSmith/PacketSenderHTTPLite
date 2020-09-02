@@ -5,5 +5,6 @@ hexdump==3.3
 aiofiles==0.5.0
 aiohttp
 uvloop==0.14.0
+cryptography==3.1
 
 

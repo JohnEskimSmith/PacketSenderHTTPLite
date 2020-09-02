@@ -1085,19 +1085,23 @@ if __name__ == "__main__":
     queue_results = asyncio.Queue()
     queue_prints = asyncio.Queue()
     # endregion
-    # create targets and put to queue_input
     read_input = method_create_targets(
-        queue_input, settings, path_to_file_targets)
+        queue_input,
+        settings,
+        path_to_file_targets)  # create targets and put to queue_input
+
     create_tasks = work_with_queue(
         queue_input,
         queue_results,
         queue_prints,
         count_cor)  # put Task with target to queue_results for execution
-    # read Tasks from from queue_results and exec it
-    execute_tasks = work_with_queue_tasks(queue_results, queue_prints)
-    # read results from queue_prints and out(write, print) it
+
+    execute_tasks = work_with_queue_tasks(queue_results,
+                                          queue_prints)  # read Tasks from from queue_results and exec it
     print_output = work_with_queue_result(
-        queue_prints, output_file, mode_write)
+        queue_prints,
+        output_file,
+        mode_write)  # read Tasks from from queue_results and exec it
     loop.run_until_complete(
         asyncio.gather(
             read_input,
