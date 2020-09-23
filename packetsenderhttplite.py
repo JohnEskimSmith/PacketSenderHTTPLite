@@ -787,10 +787,6 @@ async def work_with_queue_tasks(queue_results: asyncio.Queue,
         if task:
             await task
 
-    # global count_input
-    # global count_good
-    # global count_error
-
 
 async def work_with_queue(queue_with_input: asyncio.Queue,
                           queue_with_tasks: asyncio.Queue,
@@ -868,8 +864,17 @@ async def read_input_file(queue_input: asyncio.Queue,
                     linein, settings, domain=True)
             if targets:
                 for target in targets:
-                    count_input += 1  # statistics
-                    queue_input.put_nowait(target)
+                    check_queue = True
+                    while check_queue:
+                        size_queue = queue_input.qsize()
+                        if size_queue < queue_limit_targets - 1:
+                            count_input += 1  # statistics
+                            queue_input.put_nowait(target)
+                            check_queue = False
+                        else:
+                            await asyncio.sleep(sleep_duration_queue_full)
+                    # count_input += 1  # statistics
+                    # queue_input.put_nowait(target)
     await queue_input.put(b"check for end")
 
 
@@ -889,8 +894,17 @@ async def read_input_stdin(queue_input: asyncio.Queue,
                     linein, settings, domain=True)
             if targets:
                 for target in targets:
-                    count_input += 1  # statistics
-                    queue_input.put_nowait(target)
+                    check_queue = True
+                    while check_queue:
+                        size_queue = queue_input.qsize()
+                        if size_queue < queue_limit_targets - 1:
+                            count_input += 1  # statistics
+                            queue_input.put_nowait(target)
+                            check_queue = False
+                        else:
+                            await asyncio.sleep(sleep_duration_queue_full)
+                    # count_input += 1  # statistics
+                    # queue_input.put_nowait(target)
         except EOFError:
             await queue_input.put(b"check for end")
             break
@@ -944,6 +958,13 @@ if __name__ == "__main__":
         type=int,
         default=1024,
         help='Number of coroutines to use (default: 1024)')
+
+    parser.add_argument(
+        "--queue-sleep",
+        dest='queue_sleep',
+        type=int,
+        default=1,
+        help='Sleep duration if the queue is full, default 1 sec. Size queue == senders')
 
     parser.add_argument(
         "--max-size",
@@ -1073,7 +1094,10 @@ if __name__ == "__main__":
                 }
 
     count_cor = args.senders
-
+    # region limits input Queue
+    queue_limit_targets = count_cor
+    sleep_duration_queue_full = args.queue_sleep
+    # endregion
     count_input = 0
     count_good = 0
     count_error = 0
