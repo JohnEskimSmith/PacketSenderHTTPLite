@@ -22,7 +22,7 @@ import copy
 import os
 from hashlib import sha256, sha1, md5
 import re
-import uvloop
+# import uvloop
 from urllib.parse import urlparse
 from typing import (Any,
                     NamedTuple,
@@ -777,7 +777,7 @@ async def worker_single(target: NamedTuple,
         result = None
         timeout = ClientTimeout(target.timeout)
         if target.sslcheck:
-            conn = TCPConnector(ssl=False, limit_per_host=1)
+            conn = TCPConnector(ssl=False, limit_per_host=0)
             session = ClientSession(
                 timeout=timeout,
                 connector=conn,
@@ -1203,7 +1203,7 @@ if __name__ == "__main__":
     count_good = 0
     count_error = 0
     start_time = datetime.datetime.now()
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    # asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
     loop = asyncio.get_event_loop()
     # region Queues
     queue_input = asyncio.Queue()
