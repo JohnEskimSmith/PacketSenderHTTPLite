@@ -23,12 +23,16 @@ import os
 from hashlib import sha256, sha1, md5
 import re
 import uvloop
+from urllib.parse import urlparse
 from typing import (Any,
                     NamedTuple,
                     Generator,
                     BinaryIO,
                     TextIO,
+                    Dict
                     )
+
+CONST_STOP = b"check for end"
 
 
 def check_domain(value) -> bool:
@@ -358,6 +362,63 @@ def create_target_http_protocol(hostname: str,
         yield target
 
 
+def create_target_simple_http_protocol(target_raw: str,
+                                       settings: dict) -> Generator[NamedTuple, None, None]:
+
+    current_settings = copy.copy(settings)
+
+    if not settings['full_headers']:
+        if settings['user_agent'] == 'random':
+            headers = {'user-agent': return_user_agent()}
+            current_settings['headers'] = headers
+        elif settings['user_agent'].lower() == 'no':
+            current_settings['headers'] = {}
+        else:
+            headers = {'user-agent': settings['user_agent']}
+            current_settings['headers'] = headers
+    else:
+        current_settings['headers'] = settings['full_headers']
+    #
+    if current_settings['max_size'] != -1:
+        current_settings['max_size'] = current_settings['max_size'] * 1024
+
+    target = urlparse(target_raw)
+
+    url = target.path
+    if not url:
+        url = '/'
+    domain = target.netloc
+    scheme = target.scheme
+    port = target.port
+    if not port:
+        port = str(current_settings["port"])
+    full_path = f'{scheme}://{domain}:{port}{url}'
+    if scheme == 'https':
+        current_settings['sslcheck'] = True
+    else:
+        current_settings['sslcheck'] = False
+    current_settings['scheme'] = scheme
+    current_settings['url'] = full_path
+    current_settings['endpoint'] = url
+    current_settings['status_domain'] = True
+    current_settings['ip'] = ''
+    current_settings['fqdn'] = domain
+    #
+    key_names = list(current_settings.keys())
+    key_names.extend(['payload'])
+    Target = namedtuple('Target', key_names)
+    if payloads:
+        for payload in payloads:
+            tmp_settings = copy.copy(current_settings)
+            tmp_settings['payload'] = payload
+            target = Target(**tmp_settings)
+            yield target
+    else:
+        current_settings['payload'] = None
+        target = Target(**current_settings)
+        yield target
+
+
 def create_targets_http_protocol(ip_str: str,
                                  settings: dict,
                                  domain: bool = False) -> NamedTuple:
@@ -370,6 +431,22 @@ def create_targets_http_protocol(ip_str: str,
         for target in create_target_http_protocol(
                 str(host), settings, domain=domain):
             yield target
+
+
+def create_targets_simple_http_protocol(target_raw: str, settings: dict) -> NamedTuple:
+
+    try:
+        target = urlparse(target_raw)
+        hostname = target.netloc
+        scheme = target.scheme
+        if scheme and hostname:
+            if scheme in ['http', 'https']:
+                for target in create_target_simple_http_protocol(
+                        str(target_raw), settings):
+                    yield target
+    except:
+        pass
+
 
 
 def create_template_struct(target: NamedTuple) -> dict:
@@ -599,7 +676,7 @@ class WrappedResponseClass(ClientResponse):
         return self._ssl_prot_extra
 
 
-async def make_document_from_response(response, target) -> dict:
+async def make_document_from_response(response, target, app_settings: Dict) -> Dict:
 
     def update_line(json_record, target):
         json_record['ip'] = target.ip
@@ -611,8 +688,9 @@ async def make_document_from_response(response, target) -> dict:
     _default_record = create_template_struct(target)
     if target.sslcheck:
         cert = convert_bytes_to_cert(response.peer_cert)
-        _default_record['data']['http']['result']['response']['request']['tls_log']['handshake_log'][
-            'server_certificates']['certificate']['raw'] = base64.b64encode(response.peer_cert).decode('utf-8')
+        if not app_settings['without_certraw']:
+            _default_record['data']['http']['result']['response']['request']['tls_log']['handshake_log'][
+                'server_certificates']['certificate']['raw'] = base64.b64encode(response.peer_cert).decode('utf-8')
         if cert:
             _default_record['data']['http']['result']['response']['request']['tls_log'][
                 'handshake_log']['server_certificates']['certificate']['parsed'] = cert
@@ -641,11 +719,12 @@ async def make_document_from_response(response, target) -> dict:
         except Exception as e:
             pass
         #
-        try:
-            _base64_data = base64.b64encode(buffer).decode('utf-8')
-            _default_record['data']['http']['result']['response']['body_raw'] = _base64_data
-        except Exception as e:
-            pass
+        if not app_settings['without_base64']:
+            try:
+                _base64_data = base64.b64encode(buffer).decode('utf-8')
+                _default_record['data']['http']['result']['response']['body_raw'] = _base64_data
+            except Exception as e:
+                pass
         try:
             hashs = {'sha256': sha256,
                      'sha1': sha1,
@@ -671,7 +750,8 @@ async def make_document_from_response(response, target) -> dict:
 
 async def worker_single(target: NamedTuple,
                         semaphore: asyncio.Semaphore,
-                        queue_out: asyncio.Queue) -> dict:
+                        queue_out: asyncio.Queue,
+                        app_settings: Dict) -> Dict:
 
     def return_ip_from_deep(sess, response) -> str:
         try:
@@ -719,7 +799,7 @@ async def worker_single(target: NamedTuple,
                                        allow_redirects=target.allow_redirects,
                                        data=target.payload,
                                        timeout=timeout) as response:
-                result = await make_document_from_response(response, target)
+                result = await make_document_from_response(response, target, app_settings)
                 # какое-то безумие с функцией return_ip_from_deep, автор aiohttp говорит, что просто так до ip сервера
                 # не добраться
                 # link: https://github.com/aio-libs/aiohttp/issues/4249
@@ -781,8 +861,8 @@ async def work_with_queue_tasks(queue_results: asyncio.Queue,
     while True:
         # wait for an item from the "start_application"
         task = await queue_results.get()
-        if task == b"check for end":
-            await queue_prints.put(b"check for end")
+        if task == CONST_STOP:
+            await queue_prints.put(CONST_STOP)
             break
         if task:
             await task
@@ -791,6 +871,7 @@ async def work_with_queue_tasks(queue_results: asyncio.Queue,
 async def work_with_queue(queue_with_input: asyncio.Queue,
                           queue_with_tasks: asyncio.Queue,
                           queue_out: asyncio.Queue,
+                          settings: Dict,
                           count: int) -> None:
     """
 
@@ -804,12 +885,12 @@ async def work_with_queue(queue_with_input: asyncio.Queue,
     while True:
         # wait for an item from the "start_application"
         item = await queue_with_input.get()
-        if item == b"check for end":
-            await queue_with_tasks.put(b"check for end")
+        if item == CONST_STOP:
+            await queue_with_tasks.put(CONST_STOP)
             break
         if item:
             task = asyncio.create_task(
-                worker_single(item, semaphore, queue_out))
+                worker_single(item, semaphore, queue_out, settings))
             await queue_with_tasks.put(task)
 
 
@@ -830,7 +911,7 @@ async def work_with_queue_result(queue_out: asyncio.Queue,
     async with aiofiles.open(filename, mode=mode_write) as file_with_results:
         while True:
             line = await queue_out.get()
-            if line == b"check for end":
+            if line == CONST_STOP:
                 break
             if line:
                 await method_write_result(file_with_results, line)
@@ -857,11 +938,15 @@ async def read_input_file(queue_input: asyncio.Queue,
         async for line in f:
             linein = line.strip()
             targets = None
-            if any([check_ip(linein), check_network(linein)]):
-                targets = create_targets_http_protocol(linein, settings)
-            elif check_domain(linein):
-                targets = create_targets_http_protocol(
-                    linein, settings, domain=True)
+            if not settings['simple_mode']:
+                if any([check_ip(linein), check_network(linein)]):
+                    targets = create_targets_http_protocol(linein, settings)
+                elif check_domain(linein):
+                    targets = create_targets_http_protocol(
+                        linein, settings, domain=True)
+            else:
+                targets = create_targets_simple_http_protocol(
+                    linein, settings)
             if targets:
                 for target in targets:
                     check_queue = True
@@ -869,13 +954,14 @@ async def read_input_file(queue_input: asyncio.Queue,
                         size_queue = queue_input.qsize()
                         if size_queue < queue_limit_targets - 1:
                             count_input += 1  # statistics
-                            queue_input.put_nowait(target)
+                            await queue_input.put(target)
                             check_queue = False
                         else:
                             await asyncio.sleep(sleep_duration_queue_full)
                     # count_input += 1  # statistics
                     # queue_input.put_nowait(target)
-    await queue_input.put(b"check for end")
+    await queue_input.put(CONST_STOP)
+
 
 
 async def read_input_stdin(queue_input: asyncio.Queue,
@@ -887,11 +973,15 @@ async def read_input_stdin(queue_input: asyncio.Queue,
             _tmp_input = await ainput()  # read str from stdin
             linein = _tmp_input.strip()
             targets = None
-            if any([check_ip(linein), check_network(linein)]):
-                targets = create_targets_http_protocol(linein, settings)
-            elif check_domain(linein):
-                targets = create_targets_http_protocol(
-                    linein, settings, domain=True)
+            if not settings.simple_mode:
+                if any([check_ip(linein), check_network(linein)]):
+                    targets = create_targets_http_protocol(linein, settings)
+                elif check_domain(linein):
+                    targets = create_targets_http_protocol(
+                        linein, settings, domain=True)
+            else:
+                targets = create_targets_simple_http_protocol(
+                    linein, settings)
             if targets:
                 for target in targets:
                     check_queue = True
@@ -899,14 +989,14 @@ async def read_input_stdin(queue_input: asyncio.Queue,
                         size_queue = queue_input.qsize()
                         if size_queue < queue_limit_targets - 1:
                             count_input += 1  # statistics
-                            queue_input.put_nowait(target)
+                            await queue_input.put(target)
                             check_queue = False
                         else:
                             await asyncio.sleep(sleep_duration_queue_full)
                     # count_input += 1  # statistics
                     # queue_input.put_nowait(target)
         except EOFError:
-            await queue_input.put(b"check for end")
+            await queue_input.put(CONST_STOP)
             break
 
 
@@ -1016,6 +1106,14 @@ if __name__ == "__main__":
     parser.add_argument('--use-https', dest='sslcheck', action='store_true',
                         help='Perform an HTTPS connection on the initial host')
 
+    parser.add_argument('--simple-mode', dest='simple_mode', action='store_true',
+                        help='use targets from file(stdin) like: http://www.example.com/example/endpoint')
+
+    parser.add_argument('--without-base64', dest='without_base64', action='store_true',
+                        help='use targets from file(stdin) like: http://www.example.com/example/endpoint')
+
+    parser.add_argument('--without-cert', dest='without_certraw', action='store_true')
+
     parser.add_argument(
         '--list-payloads',
         nargs='*',
@@ -1090,7 +1188,10 @@ if __name__ == "__main__":
                 'user_agent': args.user_agent,
                 'list_payloads': payloads,
                 'max_size': args.max_size,
-                'full_headers': full_headers
+                'full_headers': full_headers,
+                'simple_mode': args.simple_mode,
+                'without_base64': args.without_base64,
+                'without_certraw': args.without_certraw
                 }
 
     count_cor = args.senders
@@ -1118,6 +1219,7 @@ if __name__ == "__main__":
         queue_input,
         queue_results,
         queue_prints,
+        settings,
         count_cor)  # put Task with target to queue_results for execution
 
     execute_tasks = work_with_queue_tasks(queue_results,
