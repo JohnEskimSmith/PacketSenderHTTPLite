@@ -33,7 +33,7 @@ from typing import (Any,
                     )
 
 CONST_STOP = b"check for end"
-
+CONST_ANY_STATUS = -20000
 
 def check_domain(value) -> bool:
     """
@@ -676,7 +676,7 @@ class WrappedResponseClass(ClientResponse):
         return self._ssl_prot_extra
 
 
-async def make_document_from_response(response, target, app_settings: Dict) -> Dict:
+async def make_document_from_response(response: ClientResponse, target, app_settings: Dict) -> Dict:
 
     def update_line(json_record, target):
         json_record['ip'] = target.ip
@@ -684,6 +684,10 @@ async def make_document_from_response(response, target, app_settings: Dict) -> D
         # json_record['datetime'] = datetime.datetime.utcnow()
         # json_record['port'] = int(target.port)
         return json_record
+
+    if not (app_settings['status_code'] == CONST_ANY_STATUS):
+        if app_settings['status_code'] != response.status:
+            return None
 
     _default_record = create_template_struct(target)
     if target.sslcheck:
@@ -736,14 +740,15 @@ async def make_document_from_response(response, target, app_settings: Dict) -> D
                 )
         except Exception as e:
             pass
-        _default_record['data']['http']['result']['response']['body_hexdump'] = ''
-        try:
-            hdump = hexdump(buffer, result='return')
-            _output = base64.b64encode(bytes(hdump, 'utf-8'))
-            output = _output.decode('utf-8')
-            _default_record['data']['http']['result']['response']['body_hexdump'] = output
-        except Exception as e:
-            pass
+        if not app_settings['without_hexdump']:
+            _default_record['data']['http']['result']['response']['body_hexdump'] = ''
+            try:
+                hdump = hexdump(buffer, result='return')
+                _output = base64.b64encode(bytes(hdump, 'utf-8'))
+                output = _output.decode('utf-8')
+                _default_record['data']['http']['result']['response']['body_hexdump'] = output
+            except Exception as e:
+                pass
     result_to_output = update_line(_default_record, target)
     return result_to_output
 
@@ -806,8 +811,9 @@ async def worker_single(target: NamedTuple,
                 # но есть моменты....
                 # в функции return_ip_from_deep через какую-то "жопу"
                 # добираемся до ip - это не дело, но пока оставим так
-                if len(result['ip']) == 0:
-                    _ip = return_ip_from_deep(session, response)
+                if result:
+                    if len(result['ip']) == 0:
+                        _ip = return_ip_from_deep(session, response)
                     result['ip'] = _ip
             await asyncio.sleep(0.02)
             await session.close()
@@ -954,7 +960,7 @@ async def read_input_file(queue_input: asyncio.Queue,
                         size_queue = queue_input.qsize()
                         if size_queue < queue_limit_targets - 1:
                             count_input += 1  # statistics
-                            await queue_input.put(target)
+                            queue_input.put_nowait(target)
                             check_queue = False
                         else:
                             await asyncio.sleep(sleep_duration_queue_full)
@@ -989,7 +995,7 @@ async def read_input_stdin(queue_input: asyncio.Queue,
                         size_queue = queue_input.qsize()
                         if size_queue < queue_limit_targets - 1:
                             count_input += 1  # statistics
-                            await queue_input.put(target)
+                            queue_input.put_nowait(target)
                             check_queue = False
                         else:
                             await asyncio.sleep(sleep_duration_queue_full)
@@ -1080,6 +1086,13 @@ if __name__ == "__main__":
         'or ports range (nmap syntax: eg 1,2-10,11)')
 
     parser.add_argument(
+        "--status",
+        dest='status_code',
+        type=int,
+        default=CONST_ANY_STATUS,
+        help='http status code, ex.: 200, 404')
+
+    parser.add_argument(
         "--endpoint",
         type=str,
         default='/',
@@ -1113,6 +1126,8 @@ if __name__ == "__main__":
                         help='use targets from file(stdin) like: http://www.example.com/example/endpoint')
 
     parser.add_argument('--without-cert', dest='without_certraw', action='store_true')
+
+    parser.add_argument('--without-hexdump', dest='without_hexdump', action='store_true')
 
     parser.add_argument(
         '--list-payloads',
@@ -1183,6 +1198,7 @@ if __name__ == "__main__":
                 'endpoint': args.endpoint,
                 'sslcheck': args.sslcheck,
                 'timeout': args.timeout,
+                'status_code': args.status_code,
                 'method': method_query,
                 'allow_redirects': args.allow_redirects,
                 'user_agent': args.user_agent,
@@ -1191,7 +1207,8 @@ if __name__ == "__main__":
                 'full_headers': full_headers,
                 'simple_mode': args.simple_mode,
                 'without_base64': args.without_base64,
-                'without_certraw': args.without_certraw
+                'without_certraw': args.without_certraw,
+                'without_hexdump': args.without_hexdump
                 }
 
     count_cor = args.senders
