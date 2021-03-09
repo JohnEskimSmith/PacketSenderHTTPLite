@@ -30,13 +30,6 @@ def parse_args():
     parser.add_argument('--timeout', dest='total_timeout', type=int, default=5,
                         help='total timeout, seconds (default: 5)')
 
-    parser.add_argument('-tconnect', '--timeout-connection', dest='conn_timeout', type=int, default=3,
-                        help='Set connection timeout for open_connection, seconds (default: 3)')
-    parser.add_argument('-tread', '--timeout-read', dest='read_timeout', type=int, default=3,
-                        help='Set connection timeout for reader from connection, seconds (default: 3)')
-    parser.add_argument('-tssl', '--timeout-ssl', dest='ssl_timeout', type=int, default=3,
-                        help='Set connection timeout for reader from ssl connection, seconds (default: 3)')
-
     parser.add_argument('-p', '--port', type=int, help='Specify port (default: 80)', default=80, required=True)
     parser.add_argument('--endpoint', dest='endpoint', type=str, default='/',
                         help='Send an HTTP request to an endpoint (default: /)')
@@ -160,15 +153,10 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
     else:
         scheme = 'http'
 
-
-
     target_settings = TargetConfig(**{
         'port': args.port,
         'ssl_check': args.ssl_check,
         'total_timeout': args.total_timeout,
-        'conn_timeout': args.conn_timeout,
-        'read_timeout': args.read_timeout,
-        'ssl_timeout': args.ssl_timeout,
         'list_payloads': payloads,
         'search_values': search_values,
         'max_size': args.max_size,
@@ -186,6 +174,7 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'senders': args.senders,
         'queue_sleep': args.queue_sleep,
         'statistics': args.statistics,
+        'total_timeout': args.total_timeout,
         'input_file': input_file,
         'input_stdin': args.input_stdin,
         'single_targets': args.single_targets,

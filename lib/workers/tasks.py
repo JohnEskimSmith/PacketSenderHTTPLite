@@ -293,9 +293,7 @@ class TargetWorker:
             return json_record
         async with self.semaphore:
             result = None
-            # timeout = ClientTimeout(connect=target.conn_timeout, sock_read=target.read_timeout)
             timeout = ClientTimeout(total=target.total_timeout)
-
             trace_config = TraceConfig()
             trace_config.on_request_start.append(on_request_start)
             trace_config.on_request_end.append(on_request_end)
