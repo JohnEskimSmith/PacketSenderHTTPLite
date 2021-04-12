@@ -45,6 +45,10 @@ def parse_args():
     parser.add_argument('--without-cert', dest='without_certraw', action='store_true')
     parser.add_argument('--without-hexdump', dest='without_hexdump', action='store_true')
     parser.add_argument('--full-headers', dest='full_headers', type=str, default=None)
+    # base64 - not implemented TODO: implement later BASE64
+    parser.add_argument('--full-headers-base64', dest='full_headers_base64', type=str, default=None)
+
+    parser.add_argument('--full-headers-hex', dest='full_headers_hex', type=str, default=None)
     # endregion
 
     # region filters
@@ -135,18 +139,26 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         payloads.append(single_payload)
 
     if not args.full_headers:
-        if args.user_agent == 'random':
-            headers = {'User-Agent': return_user_agent()}
+        if args.full_headers_hex:
+            try:
+                _headers_hex: bytes = bytes.fromhex(args.full_headers_hex)
+                _headers_string = _headers_hex.decode('utf-8')
+                headers = ujson_loads(_headers_string)
+            except Exception as e:
+                print(f'errors with full headers from hex. {e}, headers set to None')
+                headers = {}
         elif args.user_agent.lower() == 'no':
             headers = {}
+        elif args.user_agent == 'random':
+            headers = {'User-Agent': return_user_agent()}
         else:
             headers = {'User-Agent': args.user_agent}
     else:
         try:
             headers = ujson_loads(args.full_headers)
         except Exception as e:
+            print(f'errors with full headers. {e}, headers set to None')
             headers = {}
-            print(f'errors with full headers. {e}')
 
     if args.ssl_check:
         scheme = 'https'
