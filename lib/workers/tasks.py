@@ -318,12 +318,13 @@ class TargetWorker:
                                            trace_request_ctx=trace_request_ctx) as response:
                     if not (self.app_config.status_code == CONST_ANY_STATUS):
                         if self.app_config.status_code != response.status:
+                            _response_status = response.status
                             await asyncio.sleep(0.005)
                             try:
                                 await session.close()
                             except:
                                 pass
-                            raise ValueError(f'status code: {response.status} is not equal to filter: {self.app_config.status_code}')
+                            raise ValueError(f'status code: {_response_status} is not equal to filter: {self.app_config.status_code}')
 
                     _default_record = create_template_struct(target)
                     if target.ssl_check:
