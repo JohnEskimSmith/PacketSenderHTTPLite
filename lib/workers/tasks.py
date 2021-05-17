@@ -396,7 +396,14 @@ class TargetWorker:
             except Exception as exp:
                 result = create_error_template(target, str(exp))
                 await asyncio.sleep(0.005)
-                await session.close()
+                try:
+                    await session.close()
+                except:
+                    pass
+                try:
+                    await conn.close()
+                except:
+                    pass
             if result:
                 if 'duration' in trace_request_ctx:
                     request_duration = trace_request_ctx['duration']
