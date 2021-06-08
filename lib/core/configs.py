@@ -38,6 +38,7 @@ class TargetConfig:
     method: str
     allow_redirects: bool
     hostname: str
+    single_payload_type: str
 
 
     def as_dict(self):
@@ -47,6 +48,7 @@ class TargetConfig:
             'total_timeout': self.total_timeout,
             'list_payloads': self.list_payloads,
             'python_payloads': self.python_payloads,
+            'single_payload_type': self.single_payload_type,
             'generator_payloads': self.generator_payloads,
             'endpoint': self.endpoint,
             'hostname': self.hostname,
@@ -76,4 +78,5 @@ Target = namedtuple('Target', ['total_timeout',
                                'payload',
                                'url',
                                'allow_redirects',
+                               'single_payload_type',
                                'additions'])

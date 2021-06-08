@@ -1,10 +1,11 @@
 from base64 import b64encode
 from ipaddress import ip_network
-from typing import Iterator, Generator, Optional
+from typing import Iterator, Generator, Optional, Dict
 from urllib.parse import urlparse
 from re import compile as re_compile
 from lib.core import Target, load_python_generator_payloads_from_file, TargetConfig, PayloadGenerator
-from lib.util import is_ip, is_network
+from lib.util import is_ip, is_network, encode_files_payload
+from ujson import loads as ujson_loads
 from copy import deepcopy
 
 # noinspection PyArgumentList
@@ -24,15 +25,50 @@ def create_target_http_protocol(raw_str: str,
         url = f'{target_config.scheme}://{target_ip}:{target_config.port}{target_config.endpoint}'
         if target_config.list_payloads:
             for payload in target_config.list_payloads:
+                _headers: Dict = target_config.headers
+                data_payload = payload
+                if (target_config.single_payload_type).lower() == 'data':
+                    data_payload = payload
+                elif (target_config.single_payload_type).lower() == 'json':
+                    pass
+                elif (target_config.single_payload_type).lower() == 'files': # TODO add exception
+                    _target_payload_string = (payload).decode('utf-8')
+                    target_payload_dict = ujson_loads(_target_payload_string)
+                    data_payload, _headers = encode_files_payload(files=target_payload_dict,
+                                                                  data=None,
+                                                                  headers=target_config.headers)
                 additions = {'data_payload': {'payload_raw': b64encode(payload).decode('utf-8'), 'variables': []}}
-                target_instance = Target(ip=target_ip, url=url, payload=payload, additions=additions, **kwargs)
+                kwargs.pop('headers')
+                target_instance = Target(ip=target_ip,
+                                         url=url,
+                                         headers=_headers,
+                                         payload=data_payload,
+                                         additions=additions, **kwargs)
                 yield target_instance
         elif target_config.python_payloads:
             payloads_generator = get_generator(target_config)
             for payload in payloads_generator(target_ip, target_type, kwargs):
                 payload = payload['payload']
                 additions = payload['data_payload']
-                target_instance = Target(ip=target_ip, url=url, payload=payload, additions=additions, **kwargs)
+                _headers: Dict = target_config.headers
+                data_payload = payload
+                if (target_config.single_payload_type).lower() == 'data':
+                    data_payload = payload
+                elif (target_config.single_payload_type).lower() == 'json':
+                    pass
+                elif (target_config.single_payload_type).lower() == 'files': # TODO add exception
+                    _target_payload_string = (payload).decode('utf-8')
+                    target_payload_dict = ujson_loads(_target_payload_string)
+                    data_payload, _headers = encode_files_payload(files=target_payload_dict,
+                                                                  data=None,
+                                                                  headers=target_config.headers)
+                kwargs.pop('headers')
+
+                target_instance = Target(ip=target_ip,
+                                         url=url,
+                                         payload=data_payload,
+                                         headers=_headers,
+                                         additions=additions, **kwargs)
                 yield target_instance
         else:
             target_instance = Target(ip=target_ip, url=url, payload=None, additions=None, **kwargs)

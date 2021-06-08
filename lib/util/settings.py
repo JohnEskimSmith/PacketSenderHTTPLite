@@ -45,7 +45,6 @@ def parse_args():
     parser.add_argument('--without-cert', dest='without_certraw', action='store_true')
     parser.add_argument('--without-hexdump', dest='without_hexdump', action='store_true')
     parser.add_argument('--full-headers', dest='full_headers', type=str, default=None)
-    # base64 - not implemented TODO: implement later BASE64
     parser.add_argument('--full-headers-base64', dest='full_headers_base64', type=str, default=None)
 
     parser.add_argument('--full-headers-hex', dest='full_headers_hex', type=str, default=None)
@@ -68,6 +67,9 @@ def parse_args():
     parser.add_argument('--single-payload', dest='single_payload', type=str, help='single payload in BASE64 from bytes')
     parser.add_argument('--single-payload-hex', dest='single_payload_hex', type=str,
                         help='single payload in hex(bytes)')
+    parser.add_argument('--single-payload-type', dest='single_payload_type', type=str,
+                        default='DATA', help="single payload type: DATA(raw bin), JSON, FILES(like at requests - Dictionary of 'filename': file-like-objects for multipart encoding upload)")
+
     parser.add_argument('--python-payloads', dest='python_payloads', type=str, help='path to Python module')
     parser.add_argument('--generator-payloads', dest='generator_payloads', type=str,
                         help='name function of gen.payloads from Python module')
@@ -132,7 +134,7 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         single_payload = decode_base64_string(args.single_payload)
     elif args.single_payload_hex:
         try:
-            single_payload = bytes.fromhex(args.single_payload_hex)
+            single_payload: bytes = bytes.fromhex(args.single_payload_hex)
         except BaseException:
             pass
     if single_payload:
@@ -179,6 +181,7 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'endpoint': args.endpoint,
         'method': args.method,
         'hostname': '',
+        'single_payload_type': args.single_payload_type,
         'allow_redirects':args.allow_redirects
     })
 
@@ -213,6 +216,7 @@ def abort(message: str, exc: Exception = None, exit_code: int = 1):
 
 def parse_settings_file(file_path: str) -> Tuple[TargetConfig, AppConfig]:
     raise NotImplementedError('config read')
+
 
 def return_user_agent() -> str:
     """

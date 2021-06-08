@@ -16,7 +16,7 @@ from ujson import dumps as ujson_dumps
 from lib.core import create_template_struct, convert_bytes_to_cert, create_error_template, Stats, AppConfig, \
     Target, TargetConfig, CONST_ANY_STATUS
 from lib.util import access_dot_path, is_ip, is_network, single_read, multi_read, \
-    filter_bytes, write_to_file, write_to_stdout, read_http_content
+    filter_bytes, write_to_file, write_to_stdout, read_http_content, encode_files_payload
 from .factories import create_targets_http_protocol
 
 __all__ = ['QueueWorker', 'TargetReader', 'TargetFileReader', 'TargetStdinReader', 'TaskProducer', 'Executor',
