@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import List, Dict
 CONST_ANY_STATUS = -20000  # no matter what
 
+
 @dataclass(frozen=True)
 class AppConfig:
     senders: int
@@ -33,6 +34,7 @@ class TargetConfig:
     search_values: List[bytes]
     max_size: int
     headers: Dict
+    cookies: Dict
     scheme: str
     endpoint: str
     method: str
@@ -53,6 +55,7 @@ class TargetConfig:
             'endpoint': self.endpoint,
             'hostname': self.hostname,
             'headers': self.headers,
+            'cookies': self.cookies,
             'scheme': self.scheme,
             'method': self.method,
             'search_values': self.search_values,
@@ -73,6 +76,7 @@ Target = namedtuple('Target', ['total_timeout',
                                'hostname',
                                'port',
                                'headers',
+                               'cookies',
                                'scheme',
                                'method',
                                'payload',

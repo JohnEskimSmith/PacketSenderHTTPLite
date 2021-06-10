@@ -15,8 +15,7 @@ from ujson import dumps as ujson_dumps
 
 from lib.core import create_template_struct, convert_bytes_to_cert, create_error_template, Stats, AppConfig, \
     Target, TargetConfig, CONST_ANY_STATUS
-from lib.util import access_dot_path, is_ip, is_network, single_read, multi_read, \
-    filter_bytes, write_to_file, write_to_stdout, read_http_content, encode_files_payload
+from lib.util import access_dot_path, is_ip, filter_bytes, write_to_file, write_to_stdout, read_http_content
 from .factories import create_targets_http_protocol
 
 __all__ = ['QueueWorker', 'TargetReader', 'TargetFileReader', 'TargetStdinReader', 'TaskProducer', 'Executor',
@@ -291,6 +290,7 @@ class TargetWorker:
             # json_record['datetime'] = datetime.datetime.utcnow()
             # json_record['port'] = int(target.port)
             return json_record
+
         async with self.semaphore:
             result = None
             timeout = ClientTimeout(total=target.total_timeout)
@@ -313,6 +313,7 @@ class TargetWorker:
                                            target.url,
                                            timeout=timeout,
                                            headers=target.headers,
+                                           cookies=target.cookies,
                                            allow_redirects=target.allow_redirects,
                                            data=target.payload,
                                            trace_request_ctx=trace_request_ctx) as response:
@@ -347,47 +348,53 @@ class TargetWorker:
                     if target.method in ['GET', 'POST', 'PUT', 'DELETE', 'UPDATE']:
                         buffer = b""
                         try:
-                            buffer = await read_http_content(response, n=target.max_size)
+                            read_c = asyncio.wait_for(read_http_content(response, n=target.max_size),
+                                                      timeout=target.total_timeout)
+                            buffer = await read_c
                         except Exception as e:
                             pass
-                        _default_record['data']['http']['result']['response']['content_length'] = len(buffer)
-                        _default_record['data']['http']['result']['response']['body'] = ''
-                        try:
-                            _default_record['data']['http']['result']['response']['body'] = buffer.decode()
-                        except Exception as e:
-                            pass
-                        if not self.app_config.without_base64:
-                            try:
-                                _base64_data = b64encode(buffer).decode('utf-8')
-                                _default_record['data']['http']['result']['response']['body_raw'] = _base64_data
-                            except Exception as e:
-                                pass
-                        try:
-                            hashs = {'sha256': sha256,
-                                     'sha1': sha1,
-                                     'md5': md5}
-                            for namehash, func in hashs.items():
-                                hm = func()
-                                hm.update(buffer)
-                                _default_record['data']['http']['result']['response'][f'body_{namehash}'] = hm.hexdigest(
-                                )
-                        except Exception as e:
-                            pass
-                        if not self.app_config.without_hexdump:
-                            _default_record['data']['http']['result']['response']['body_hexdump'] = ''
-                            try:
-                                hdump = hexdump(buffer, result='return')
-                                _output = b64encode(bytes(hdump, 'utf-8'))
-                                output = _output.decode('utf-8')
-                                _default_record['data']['http']['result']['response']['body_hexdump'] = output
-                            except Exception as e:
-                                pass
-
-                    result = update_line(_default_record, target)
+                        else:
+                            check_filter: bool = filter_bytes(buffer, target)
+                            if check_filter:
+                                _default_record['data']['http']['result']['response']['content_length'] = len(buffer)
+                                _default_record['data']['http']['result']['response']['body'] = ''
+                                try:
+                                    _default_record['data']['http']['result']['response']['body'] = buffer.decode()
+                                except Exception as e:
+                                    pass
+                                if not self.app_config.without_base64:
+                                    try:
+                                        _base64_data = b64encode(buffer).decode('utf-8')
+                                        _default_record['data']['http']['result']['response']['body_raw'] = _base64_data
+                                    except Exception as e:
+                                        pass
+                                try:
+                                    hashs = {'sha256': sha256,
+                                             'sha1': sha1,
+                                             'md5': md5}
+                                    for namehash, func in hashs.items():
+                                        hm = func()
+                                        hm.update(buffer)
+                                        _default_record['data']['http']['result']['response'][f'body_{namehash}'] = hm.hexdigest()
+                                except Exception as e:
+                                    pass
+                                if not self.app_config.without_hexdump:
+                                    _default_record['data']['http']['result']['response']['body_hexdump'] = ''
+                                    try:
+                                        hdump = hexdump(buffer, result='return')
+                                        _output = b64encode(bytes(hdump, 'utf-8'))
+                                        output = _output.decode('utf-8')
+                                        _default_record['data']['http']['result']['response']['body_hexdump'] = output
+                                    except Exception as e:
+                                        pass
+                                result = update_line(_default_record, target)
+                            else:
+                                # TODO: добавить статус success-not-contain для обозначения того,
+                                #  что сервис найден, но не попал под фильтр?
+                                result = create_error_template(target, error_str='', status_string='success-not-contain')
                     if result:
-                        if len(result['ip']) == 0:
-                            _ip = return_ip_from_deep(session, response)
-                            result['ip'] = _ip
+                        if not result['ip']:
+                            result['ip'] = return_ip_from_deep(session, response)
                 await asyncio.sleep(0.005)
                 try:
                     await session.close()

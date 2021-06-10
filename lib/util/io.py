@@ -1,55 +1,53 @@
-import asyncio
 from base64 import b64decode
-from typing import Any, Tuple
 from aiohttp import ClientConnectionError, ClientResponse
-from lib.core import create_error_template, Target
+from lib.core import Target
 from collections.abc import Mapping
 from urllib3.fields import RequestField
 from urllib3.filepost import encode_multipart_formdata
 from os.path import basename as  os_path_basename
-__all__ = ['single_read', 'multi_read', 'write_to_stdout', 'write_to_file', 'decode_base64_string',
+__all__ = ['write_to_stdout', 'write_to_file', 'decode_base64_string',
            'filter_bytes', 'read_http_content', 'encode_files_payload']
 
 basestring = (str, bytes)
 
-async def single_read(reader: asyncio.StreamReader, target: Target) -> Tuple[bool, Any]:
-    # region old
-    future_reader = reader.read(target.max_size)
-    try:
-        # через asyncio.wait_for - задаем время на чтение из
-        # соединения
-        data = await asyncio.wait_for(future_reader, timeout=target.read_timeout)
-        return True, data
-    except Exception as e:
-        result = create_error_template(target, str(e))
-        return False, result
+# async def single_read(reader: asyncio.StreamReader, target: Target) -> Tuple[bool, Any]:
+#     # region old
+#     future_reader = reader.read(target.max_size)
+#     try:
+#         # через asyncio.wait_for - задаем время на чтение из
+#         # соединения
+#         data = await asyncio.wait_for(future_reader, timeout=target.read_timeout)
+#         return True, data
+#     except Exception as e:
+#         result = create_error_template(target, str(e))
+#         return False, result
 
 
 # noinspection PyBroadException
-async def multi_read(reader: asyncio.StreamReader, target: Target) -> Tuple[bool, Any]:
-    count_size = target.max_size
-    try:
-        data = b''
-        while True:
-            try:
-                future_reader = reader.read(count_size)
-                _data = await asyncio.wait_for(future_reader, timeout=0.5)
-                if _data:
-                    data += _data
-                    count_size = count_size - len(data)
-                else:
-                    break
-                if count_size <= 0:
-                    break
-            except Exception:
-                break
-
-        if len(data) == 0:
-            return False, create_error_template(target, 'empty')
-        else:
-            return True, data
-    except Exception as e:
-        return False, create_error_template(target, str(e))
+# async def multi_read(reader: asyncio.StreamReader, target: Target) -> Tuple[bool, Any]:
+#     count_size = target.max_size
+#     try:
+#         data = b''
+#         while True:
+#             try:
+#                 future_reader = reader.read(count_size)
+#                 _data = await asyncio.wait_for(future_reader, timeout=0.5)
+#                 if _data:
+#                     data += _data
+#                     count_size = count_size - len(data)
+#                 else:
+#                     break
+#                 if count_size <= 0:
+#                     break
+#             except Exception:
+#                 break
+#
+#         if len(data) == 0:
+#             return False, create_error_template(target, 'empty')
+#         else:
+#             return True, data
+#     except Exception as e:
+#         return False, create_error_template(target, str(e))
 
 
 async def read_http_content(self: ClientResponse, n: int = -1) -> bytes:
@@ -125,7 +123,7 @@ def filter_bytes(buffer: bytes, target: Target) -> bool:
     return not target.search_values or any(x in buffer for x in target.search_values)
 
 
-# region functions from requests module
+# region functions from requests module for mode 'files'
 def to_key_val_list(value):
     """Take an object and test to see if it can be represented as a
     dictionary. If it can be, return a list of tuples, e.g.,

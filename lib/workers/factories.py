@@ -6,9 +6,8 @@ from re import compile as re_compile
 from lib.core import Target, load_python_generator_payloads_from_file, TargetConfig, PayloadGenerator
 from lib.util import is_ip, is_network, encode_files_payload
 from ujson import loads as ujson_loads
-from copy import deepcopy
 
-# noinspection PyArgumentList
+RESERVED_CHAR = ';'  # for spliting endpoints, i don't want use narg
 
 
 def create_target_http_protocol(raw_str: str,
@@ -18,82 +17,130 @@ def create_target_http_protocol(raw_str: str,
     На основании ip адреса и настроек возвращает через yield экзэмпляр Target.
     Каждый экземпляр Target содержит всю необходимую информацию(настройки и параметры) для функции worker.
     """
-    kwargs = target_config.as_dict()
-
     if target_type == 'network':
         target_ip = raw_str
-        url = f'{target_config.scheme}://{target_ip}:{target_config.port}{target_config.endpoint}'
-        if target_config.list_payloads:
-            for payload in target_config.list_payloads:
-                _headers: Dict = target_config.headers
-                data_payload = payload
-                if (target_config.single_payload_type).lower() == 'data':
+        endpoints = target_config.endpoint.split(RESERVED_CHAR)
+        for endpoint in endpoints:
+            kwargs = target_config.as_dict()
+            url = f'{target_config.scheme}://{target_ip}:{target_config.port}{endpoint}'
+            if target_config.list_payloads:
+                for payload in target_config.list_payloads:
+                    _headers: Dict = target_config.headers
                     data_payload = payload
-                elif (target_config.single_payload_type).lower() == 'json':
-                    pass
-                elif (target_config.single_payload_type).lower() == 'files': # TODO add exception
-                    _target_payload_string = (payload).decode('utf-8')
-                    target_payload_dict = ujson_loads(_target_payload_string)
-                    data_payload, _headers = encode_files_payload(files=target_payload_dict,
-                                                                  data=None,
-                                                                  headers=target_config.headers)
-                additions = {'data_payload': {'payload_raw': b64encode(payload).decode('utf-8'), 'variables': []}}
-                kwargs.pop('headers')
-                target_instance = Target(ip=target_ip,
-                                         url=url,
-                                         headers=_headers,
-                                         payload=data_payload,
-                                         additions=additions, **kwargs)
-                yield target_instance
-        elif target_config.python_payloads:
-            payloads_generator = get_generator(target_config)
-            for payload in payloads_generator(target_ip, target_type, kwargs):
-                payload = payload['payload']
-                additions = payload['data_payload']
-                _headers: Dict = target_config.headers
-                data_payload = payload
-                if (target_config.single_payload_type).lower() == 'data':
+                    if (target_config.single_payload_type).lower() == 'data':
+                        data_payload = payload
+                    elif (target_config.single_payload_type).lower() == 'json':
+                        pass
+                    elif (target_config.single_payload_type).lower() == 'files': # TODO add exception
+                        _target_payload_string = (payload).decode('utf-8')
+                        target_payload_dict = ujson_loads(_target_payload_string)
+                        data_payload, _headers = encode_files_payload(files=target_payload_dict,
+                                                                      data=None,
+                                                                      headers=target_config.headers)
+                    additions = {'data_payload': {'payload_raw': b64encode(payload).decode('utf-8'), 'variables': []}}
+                    try:
+                        kwargs.pop('headers')
+                        kwargs.pop('endpoint')
+                    except:
+                        pass
+                    target_instance = Target(ip=target_ip,
+                                             url=url,
+                                             headers=_headers,
+                                             payload=data_payload,
+                                             endpoint=endpoint,
+                                             additions=additions, **kwargs)
+                    yield target_instance
+            elif target_config.python_payloads:
+                payloads_generator = get_generator(target_config)
+                for payload in payloads_generator(target_ip, target_type, kwargs):
+                    payload = payload['payload']
+                    additions = payload['data_payload']
+                    _headers: Dict = target_config.headers
                     data_payload = payload
-                elif (target_config.single_payload_type).lower() == 'json':
+                    if (target_config.single_payload_type).lower() == 'data':
+                        data_payload = payload
+                    elif (target_config.single_payload_type).lower() == 'json':
+                        pass
+                    elif (target_config.single_payload_type).lower() == 'files': # TODO add exception
+                        _target_payload_string = (payload).decode('utf-8')
+                        target_payload_dict = ujson_loads(_target_payload_string)
+                        data_payload, _headers = encode_files_payload(files=target_payload_dict,
+                                                                      data=None,
+                                                                      headers=target_config.headers)
+                    try:
+                        kwargs.pop('headers')
+                        kwargs.pop('endpoint')
+                    except:
+                        pass
+                    target_instance = Target(ip=target_ip,
+                                             url=url,
+                                             payload=data_payload,
+                                             headers=_headers,
+                                             endpoint=endpoint,
+                                             additions=additions, **kwargs)
+                    yield target_instance
+            else:
+                try:
+                    kwargs.pop('endpoint')
+                except:
                     pass
-                elif (target_config.single_payload_type).lower() == 'files': # TODO add exception
-                    _target_payload_string = (payload).decode('utf-8')
-                    target_payload_dict = ujson_loads(_target_payload_string)
-                    data_payload, _headers = encode_files_payload(files=target_payload_dict,
-                                                                  data=None,
-                                                                  headers=target_config.headers)
-                kwargs.pop('headers')
-
-                target_instance = Target(ip=target_ip,
-                                         url=url,
-                                         payload=data_payload,
-                                         headers=_headers,
-                                         additions=additions, **kwargs)
+                target_instance = Target(ip=target_ip, url=url, payload=None, additions=None, endpoint=endpoint, **kwargs)
                 yield target_instance
-        else:
-            target_instance = Target(ip=target_ip, url=url, payload=None, additions=None, **kwargs)
-            yield target_instance
     elif target_type == 'hostname':
-        hostname = raw_str
-        if 'hostname' in kwargs.keys():
-            kwargs.pop('hostname')
-        url = f'{target_config.scheme}://{hostname}:{target_config.port}{target_config.endpoint}'
-        if target_config.list_payloads:
-            for payload in target_config.list_payloads:
-                additions = {'data_payload': {'payload_raw': b64encode(payload).decode('utf-8'), 'variables': []}}
-                target_instance = Target(hostname=hostname, url=url, ip='', payload=payload, additions=additions, **kwargs)
+        endpoints = target_config.endpoint.split(RESERVED_CHAR)
+        for endpoint in endpoints:
+            kwargs = target_config.as_dict()
+            hostname = raw_str
+            if 'hostname' in kwargs.keys():
+                kwargs.pop('hostname')
+
+            url = f'{target_config.scheme}://{hostname}:{target_config.port}{endpoint}'
+            if target_config.list_payloads:
+                for payload in target_config.list_payloads:
+                    additions = {'data_payload': {'payload_raw': b64encode(payload).decode('utf-8'), 'variables': []}}
+                    try:
+                        kwargs.pop('endpoint')
+                    except:
+                        pass
+                    target_instance = Target(hostname=hostname,
+                                             url=url,
+                                             ip='',
+                                             endpoint=endpoint,
+                                             payload=payload,
+                                             additions=additions,
+                                             **kwargs)
+                    yield target_instance
+            elif target_config.python_payloads:
+                payloads_generator = get_generator(target_config)
+                for payload in payloads_generator(hostname, target_type, kwargs):
+                    payload = payload['payload']
+                    additions = payload['data_payload']
+                    try:
+                        kwargs.pop('endpoint')
+                    except:
+                        pass
+                    target_instance = Target(hostname=hostname,
+                                             url=url,
+                                             ip='',
+                                             payload=payload,
+                                             additions=additions,
+                                             endpoint=endpoint,
+                                             **kwargs)
+                    yield target_instance
+            else:
+                try:
+                    kwargs.pop('endpoint')
+                except:
+                    pass
+                target_instance = Target(hostname=hostname, ip='',
+                                         url=url,
+                                         payload=None,
+                                         additions=None,
+                                         endpoint=endpoint,
+                                         **kwargs)
                 yield target_instance
-        elif target_config.python_payloads:
-            payloads_generator = get_generator(target_config)
-            for payload in payloads_generator(hostname, target_type, kwargs):
-                payload = payload['payload']
-                additions = payload['data_payload']
-                target_instance = Target(hostname=hostname, url=url, ip='', payload=payload, additions=additions, **kwargs)
-                yield target_instance
-        else:
-            target_instance = Target(hostname=hostname, ip='', url=url, payload=None, additions=None, **kwargs)
-            yield target_instance
     elif target_type == 'url':
+        kwargs = target_config.as_dict()
         url_line = urlparse(raw_str)
         url = raw_str
         hostname = url_line.hostname

@@ -10,7 +10,6 @@ from lib.core import return_payloads_from_files, AppConfig, TargetConfig, CONST_
 __all__ = ['parse_args', 'parse_settings']
 
 
-
 def parse_args():
 
     parser = argparse.ArgumentParser(description='HTTP(s) sender lite(asyncio)')
@@ -46,8 +45,9 @@ def parse_args():
     parser.add_argument('--without-hexdump', dest='without_hexdump', action='store_true')
     parser.add_argument('--full-headers', dest='full_headers', type=str, default=None)
     parser.add_argument('--full-headers-base64', dest='full_headers_base64', type=str, default=None)
-
     parser.add_argument('--full-headers-hex', dest='full_headers_hex', type=str, default=None)
+    parser.add_argument('--full-cookies', dest='full_cookies', type=str, default=None, help='http cookies as json string')
+    parser.add_argument('--full-cookies-hex', dest='full_cookies_hex', type=str, default=None, help='http cookies as json string(hex)')
     # endregion
 
     # region filters
@@ -140,11 +140,26 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
     if single_payload:
         payloads.append(single_payload)
 
+    cookies = None
+    if not args.full_cookies:
+        if args.full_cookies_hex:
+            try:
+                _cookies_hex: bytes = bytes.fromhex(args.full_cookies_hex)
+                _cookies_string: str = _cookies_hex.decode('utf-8')
+                cookies = ujson_loads(_cookies_string)
+            except Exception as e:
+                print(f'errors with full cookies from hex. {e}, cookies set to None')
+    else:
+        try:
+            cookies = ujson_loads(args.full_cookies)
+        except Exception as e:
+            print(f'errors with full cookies from string(json). {e}, cookies set to None')
+
     if not args.full_headers:
         if args.full_headers_hex:
             try:
                 _headers_hex: bytes = bytes.fromhex(args.full_headers_hex)
-                _headers_string = _headers_hex.decode('utf-8')
+                _headers_string: str = _headers_hex.decode('utf-8')
                 headers = ujson_loads(_headers_string)
             except Exception as e:
                 print(f'errors with full headers from hex. {e}, headers set to None')
@@ -177,6 +192,7 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'python_payloads': args.python_payloads,
         'generator_payloads': args.generator_payloads,
         'headers': headers,
+        'cookies': cookies,
         'scheme': scheme,
         'endpoint': args.endpoint,
         'method': args.method,
@@ -184,6 +200,7 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'single_payload_type': args.single_payload_type,
         'allow_redirects':args.allow_redirects
     })
+
 
     app_settings = AppConfig(**{
         'senders': args.senders,
