@@ -7,7 +7,7 @@ from hashlib import sha256, sha1, md5
 from hexdump import hexdump
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from ssl import _create_unverified_context as ssl_create_unverified_context
-from typing import Optional, Callable, Any, Coroutine
+from typing import Optional, Callable, Any, Coroutine, Dict
 from aiohttp import ClientSession, ClientTimeout, TCPConnector, ClientResponse, TraceConfig
 from aioconsole import ainput
 from aiofiles import open as aiofiles_open
@@ -259,6 +259,7 @@ class TargetWorker:
         self.output_queue = output_queue
         self.app_config = app_config
         self.success_only = app_config.show_only_success
+        self.trace_request_ctx = {'request': True}
 
     # noinspection PyBroadException
     async def do(self, target: Target):
@@ -308,7 +309,6 @@ class TargetWorker:
             else:
                 session = ClientSession(timeout=timeout, trace_configs=[trace_config])
             try:
-                trace_request_ctx = {'request': True}
                 async with session.request(target.method,
                                            target.url,
                                            timeout=timeout,
@@ -316,7 +316,7 @@ class TargetWorker:
                                            cookies=target.cookies,
                                            allow_redirects=target.allow_redirects,
                                            data=target.payload,
-                                           trace_request_ctx=trace_request_ctx) as response:
+                                           trace_request_ctx=self.trace_request_ctx) as response:
                     if not (self.app_config.status_code == CONST_ANY_STATUS):
                         if self.app_config.status_code != response.status:
                             _response_status = response.status
@@ -411,27 +411,30 @@ class TargetWorker:
                     await conn.close()
                 except:
                     pass
-            if result:
-                if 'duration' in trace_request_ctx:
-                    request_duration = trace_request_ctx['duration']
-                    result['data']['http']['duration'] = request_duration
-                success = access_dot_path(result, "data.http.status")
-                if self.stats:
+            await self.send_result(result=result)
+
+    async def send_result(self, result: Optional[Dict]):
+        if result:
+            if 'duration' in self.trace_request_ctx:
+                request_duration = self.trace_request_ctx['duration']
+                result['data']['http']['duration'] = request_duration
+            success = access_dot_path(result, "data.http.status")
+            if self.stats:
+                if success == "success":
+                    self.stats.count_good += 1
+                else:
+                    self.stats.count_error += 1
+            line = None
+            try:
+                if self.success_only:
                     if success == "success":
-                        self.stats.count_good += 1
-                    else:
-                        self.stats.count_error += 1
-                line = None
-                try:
-                    if self.success_only:
-                        if success == "success":
-                            line = ujson_dumps(result)
-                    else:
                         line = ujson_dumps(result)
-                except Exception:
-                    pass
-                if line:
-                    await self.output_queue.put(line)
+                else:
+                    line = ujson_dumps(result)
+            except Exception:
+                pass
+            if line:
+                await self.output_queue.put(line)
 
 
 def create_io_reader(stats: Stats, queue_input: Queue, target: TargetConfig, app_config: AppConfig) -> TargetReader:
