@@ -6,7 +6,7 @@ from re import compile as re_compile
 from lib.core import Target, load_python_generator_payloads_from_file, TargetConfig, PayloadGenerator
 from lib.util import is_ip, is_network, encode_files_payload
 from ujson import loads as ujson_loads
-
+from pickle import loads as pickle_loads
 RESERVED_CHAR = ';'  # for spliting endpoints, i don't want use narg
 
 
@@ -32,11 +32,19 @@ def create_target_http_protocol(raw_str: str,
                     elif (target_config.single_payload_type).lower() == 'json':
                         pass
                     elif (target_config.single_payload_type).lower() == 'files': # TODO add exception
-                        _target_payload_string = (payload).decode('utf-8')
-                        target_payload_dict = ujson_loads(_target_payload_string)
-                        data_payload, _headers = encode_files_payload(files=target_payload_dict,
-                                                                      data=None,
-                                                                      headers=target_config.headers)
+                        # _target_payload_string = (payload).decode('utf-8')
+                        # target_payload_dict = ujson_loads(_target_payload_string)
+                        # пока иначе не придумал
+                        # TODO: переосмыслить
+                        try:
+                            target_payload_dict = pickle_loads(payload)
+                            assert isinstance(target_payload_dict, dict)
+                        except:
+                            pass
+                        else:
+                            data_payload, _headers = encode_files_payload(files=target_payload_dict,
+                                                                          data=None,
+                                                                          headers=target_config.headers)
                     additions = {'data_payload': {'payload_raw': b64encode(payload).decode('utf-8'), 'variables': []}}
                     try:
                         kwargs.pop('headers')
@@ -62,11 +70,17 @@ def create_target_http_protocol(raw_str: str,
                     elif (target_config.single_payload_type).lower() == 'json':
                         pass
                     elif (target_config.single_payload_type).lower() == 'files': # TODO add exception
-                        _target_payload_string = (payload).decode('utf-8')
-                        target_payload_dict = ujson_loads(_target_payload_string)
-                        data_payload, _headers = encode_files_payload(files=target_payload_dict,
-                                                                      data=None,
-                                                                      headers=target_config.headers)
+                        # пока иначе не придумал
+                        # TODO: переосмыслить
+                        try:
+                            target_payload_dict = pickle_loads(payload)
+                            assert isinstance(target_payload_dict, dict)
+                        except:
+                            pass
+                        else:
+                            data_payload, _headers = encode_files_payload(files=target_payload_dict,
+                                                                          data=None,
+                                                                          headers=target_config.headers)
                     try:
                         kwargs.pop('headers')
                         kwargs.pop('endpoint')

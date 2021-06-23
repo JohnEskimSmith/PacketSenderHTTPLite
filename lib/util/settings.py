@@ -67,6 +67,8 @@ def parse_args():
     parser.add_argument('--single-payload', dest='single_payload', type=str, help='single payload in BASE64 from bytes')
     parser.add_argument('--single-payload-hex', dest='single_payload_hex', type=str,
                         help='single payload in hex(bytes)')
+    parser.add_argument('--single-payload-pickle-hex', dest='single_payload_pickle_hex', type=str,
+                        help='python pickle object in hex(bytes)')
     parser.add_argument('--single-payload-type', dest='single_payload_type', type=str,
                         default='DATA', help="single payload type: DATA(raw bin), JSON, FILES(like at requests - Dictionary of 'filename': file-like-objects for multipart encoding upload)")
 
@@ -136,6 +138,11 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         try:
             single_payload: bytes = bytes.fromhex(args.single_payload_hex)
         except BaseException:
+            pass
+    elif args.single_payload_pickle_hex:
+        try:
+            single_payload: bytes = bytes.fromhex(args.single_payload_pickle_hex)
+        except:
             pass
     if single_payload:
         payloads.append(single_payload)
