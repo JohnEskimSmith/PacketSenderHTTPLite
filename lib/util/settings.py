@@ -6,6 +6,7 @@ from random import choice
 from ujson import loads as ujson_loads
 from .io import decode_base64_string
 from lib.core import return_payloads_from_files, AppConfig, TargetConfig, CONST_ANY_STATUS
+from itertools import cycle
 
 __all__ = ['parse_args', 'parse_settings']
 
@@ -40,7 +41,7 @@ def parse_args():
                         help='Set HTTP request method type (default: GET, available methods: GET, POST, HEAD)')
     # region about proxy
     parser.add_argument("--proxy", type=str, dest='proxy_connection_string',
-                        help='proxy connection string: "http://myproxy.com" or "http://user:pass@some.proxy.com"')
+                        help='proxy connection strings(;): "http://myproxy.com" or "http://user:pass@some.proxy.com"')
     parser.add_argument("--proxy-generator", type=str, dest='proxy_connection_generator', help='not implemented ')
     parser.add_argument("--proxy-source", type=str, dest='proxy_source', help='not implemented ')
     # endregion
@@ -119,9 +120,11 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
     proxy_connections = []
     if args.proxy_connection_string:
         # TODO: валидировать строку подключения
-        proxy_connection_string = args.proxy_connection_string
-        proxy_connections.append(proxy_connection_string)
-
+        proxy_connection_string = [connection for connection in args.proxy_connection_string.split(';')
+                                   if connection]
+        proxy_connections.extend(proxy_connection_string)
+    if proxy_connections:
+        proxy_connections = cycle(proxy_connections)
     # endregion
 
     if args.single_contain:
@@ -220,8 +223,7 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'method': args.method,
         'hostname': '',
         'single_payload_type': args.single_payload_type,
-        'allow_redirects':args.allow_redirects,
-        'proxy_connections': proxy_connections
+        'allow_redirects':args.allow_redirects
     })
 
 
@@ -240,10 +242,9 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'status_code': args.status_code,
         'without_base64': args.without_base64,
         'without_certraw': args.without_certraw,
-        'without_hexdump': args.without_hexdump
+        'without_hexdump': args.without_hexdump,
+        'proxy_connections': proxy_connections
     })
-
-
     return target_settings, app_settings
 
 

@@ -21,6 +21,7 @@ class AppConfig:
     without_base64: bool
     without_certraw: bool
     without_hexdump: bool
+    proxy_connections: iter
 
 
 @dataclass(frozen=False)
@@ -41,7 +42,6 @@ class TargetConfig:
     allow_redirects: bool
     hostname: str
     single_payload_type: str
-    proxy_connections: list
 
     def as_dict(self):
         return {
@@ -60,8 +60,7 @@ class TargetConfig:
             'method': self.method,
             'search_values': self.search_values,
             'max_size': self.max_size,
-            'allow_redirects': self.allow_redirects,
-            'proxy_connections': self.proxy_connections
+            'allow_redirects': self.allow_redirects
         }
 
 
@@ -84,5 +83,4 @@ Target = namedtuple('Target', ['total_timeout',
                                'url',
                                'allow_redirects',
                                'single_payload_type',
-                               'proxy_connections',
                                'additions'])
