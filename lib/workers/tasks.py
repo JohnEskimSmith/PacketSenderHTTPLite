@@ -329,6 +329,10 @@ class TargetWorker:
                                 await session.close()
                             except:
                                 pass
+                            try:
+                                await conn.close()
+                            except:
+                                pass
                             raise ValueError(f'status code: {_response_status} is not equal to filter: {self.app_config.status_code}')
 
                     _default_record = create_template_struct(target)
