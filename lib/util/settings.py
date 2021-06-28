@@ -38,6 +38,12 @@ def parse_args():
     parser.add_argument("--allow-redirects", dest='allow_redirects', action='store_true')
     parser.add_argument("--method", type=str, default="GET",
                         help='Set HTTP request method type (default: GET, available methods: GET, POST, HEAD)')
+    # region about proxy
+    parser.add_argument("--proxy", type=str, dest='proxy_connection_string',
+                        help='proxy connection string: "http://myproxy.com" or "http://user:pass@some.proxy.com"')
+    parser.add_argument("--proxy-generator", type=str, dest='proxy_connection_generator', help='not implemented ')
+    parser.add_argument("--proxy-source", type=str, dest='proxy_source', help='not implemented ')
+    # endregion
 
     # region add options
     parser.add_argument('--without-base64', dest='without_base64', action='store_true')
@@ -107,6 +113,15 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
 
     if args.list_payloads:
         payloads = list(return_payloads_from_files(args.list_payloads))
+    # endregion
+
+    # region about proxy
+    proxy_connections = []
+    if args.proxy_connection_string:
+        # TODO: валидировать строку подключения
+        proxy_connection_string = args.proxy_connection_string
+        proxy_connections.append(proxy_connection_string)
+
     # endregion
 
     if args.single_contain:
@@ -205,7 +220,8 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'method': args.method,
         'hostname': '',
         'single_payload_type': args.single_payload_type,
-        'allow_redirects':args.allow_redirects
+        'allow_redirects':args.allow_redirects,
+        'proxy_connections': proxy_connections
     })
 
 

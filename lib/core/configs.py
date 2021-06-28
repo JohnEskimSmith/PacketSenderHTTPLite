@@ -41,7 +41,7 @@ class TargetConfig:
     allow_redirects: bool
     hostname: str
     single_payload_type: str
-
+    proxy_connections: list
 
     def as_dict(self):
         return {
@@ -61,6 +61,7 @@ class TargetConfig:
             'search_values': self.search_values,
             'max_size': self.max_size,
             'allow_redirects': self.allow_redirects,
+            'proxy_connections': self.proxy_connections
         }
 
 
@@ -83,4 +84,5 @@ Target = namedtuple('Target', ['total_timeout',
                                'url',
                                'allow_redirects',
                                'single_payload_type',
+                               'proxy_connections',
                                'additions'])

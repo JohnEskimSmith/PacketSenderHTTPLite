@@ -12,7 +12,7 @@ from aiohttp import ClientSession, ClientTimeout, TCPConnector, ClientResponse, 
 from aioconsole import ainput
 from aiofiles import open as aiofiles_open
 from ujson import dumps as ujson_dumps
-
+from random import shuffle as random_shuffle
 from lib.core import create_template_struct, convert_bytes_to_cert, create_error_template, Stats, AppConfig, \
     Target, TargetConfig, CONST_ANY_STATUS
 from lib.util import access_dot_path, is_ip, filter_bytes, write_to_file, write_to_stdout, read_http_content
@@ -309,6 +309,11 @@ class TargetWorker:
             else:
                 session = ClientSession(timeout=timeout, trace_configs=[trace_config])
             try:
+                if target.proxy_connections:
+                    random_shuffle(target.proxy_connections)
+                    selected_proxy_connection = target.proxy_connections[0]
+                else:
+                    selected_proxy_connection = None
                 async with session.request(target.method,
                                            target.url,
                                            timeout=timeout,
@@ -316,7 +321,8 @@ class TargetWorker:
                                            cookies=target.cookies,
                                            allow_redirects=target.allow_redirects,
                                            data=target.payload,
-                                           trace_request_ctx=self.trace_request_ctx) as response:
+                                           trace_request_ctx=self.trace_request_ctx,
+                                           proxy=selected_proxy_connection) as response:
                     if not (self.app_config.status_code == CONST_ANY_STATUS):
                         if self.app_config.status_code != response.status:
                             _response_status = response.status
