@@ -305,7 +305,9 @@ class TargetWorker:
                     connector=conn,
                     response_class=WrappedResponseClass,
                     trace_configs=[trace_config])
+                simple_zero_sleep = 0.250
             else:
+                simple_zero_sleep = 0.005
                 session = ClientSession(timeout=timeout, trace_configs=[trace_config])
             try:
                 try:
@@ -324,7 +326,7 @@ class TargetWorker:
                     if not (self.app_config.status_code == CONST_ANY_STATUS):
                         if self.app_config.status_code != response.status:
                             _response_status = response.status
-                            await asyncio.sleep(0.005)
+                            await asyncio.sleep(simple_zero_sleep)
                             try:
                                 await session.close()
                             except:
@@ -403,7 +405,7 @@ class TargetWorker:
                     if result:
                         if not result['ip']:
                             result['ip'] = return_ip_from_deep(session, response)
-                await asyncio.sleep(0.005)
+                await asyncio.sleep(simple_zero_sleep)
                 try:
                     await session.close()
                 except:
@@ -414,7 +416,7 @@ class TargetWorker:
                     pass
             except Exception as exp:
                 result = create_error_template(target, str(exp))
-                await asyncio.sleep(0.005)
+                await asyncio.sleep(simple_zero_sleep)
                 try:
                     await session.close()
                 except:
