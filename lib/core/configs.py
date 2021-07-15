@@ -20,7 +20,6 @@ class AppConfig:
     status_code: int
     without_base64: bool
     without_certraw: bool
-    without_hexdump: bool
     proxy_connections: iter
 
 

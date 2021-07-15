@@ -258,7 +258,7 @@ class TargetWorker:
         self.output_queue = output_queue
         self.app_config = app_config
         self.success_only = app_config.show_only_success
-        self.trace_request_ctx = {'request': True}
+        # self.trace_request_ctx = {'request': True}
 
     # noinspection PyBroadException
     async def do(self, target: Target):
@@ -294,26 +294,26 @@ class TargetWorker:
         async with self.semaphore:
             result = None
             timeout = ClientTimeout(total=target.total_timeout)
-            trace_config = TraceConfig()
-            trace_config.on_request_start.append(on_request_start)
-            trace_config.on_request_end.append(on_request_end)
+            # trace_config = TraceConfig()
+            # trace_config.on_request_start.append(on_request_start)
+            # trace_config.on_request_end.append(on_request_end)
 
             if target.ssl_check:
                 conn = TCPConnector(ssl=False, limit_per_host=0)
                 session = ClientSession(
                     timeout=timeout,
                     connector=conn,
-                    response_class=WrappedResponseClass,
-                    trace_configs=[trace_config])
+                    response_class=WrappedResponseClass)
                 simple_zero_sleep = 0.250
             else:
-                simple_zero_sleep = 0.005
-                session = ClientSession(timeout=timeout, trace_configs=[trace_config])
+                simple_zero_sleep = 0.001
+                session = ClientSession(timeout=timeout)
+            selected_proxy_connection = None
             try:
-                try:
-                    selected_proxy_connection = next(self.app_config.proxy_connections)
-                except:
-                    selected_proxy_connection = None
+                selected_proxy_connection = next(self.app_config.proxy_connections)
+            except:
+                pass
+            try:
                 async with session.request(target.method,
                                            target.url,
                                            timeout=timeout,
@@ -321,22 +321,7 @@ class TargetWorker:
                                            cookies=target.cookies,
                                            allow_redirects=target.allow_redirects,
                                            data=target.payload,
-                                           trace_request_ctx=self.trace_request_ctx,
                                            proxy=selected_proxy_connection) as response:
-                    if not (self.app_config.status_code == CONST_ANY_STATUS):
-                        if self.app_config.status_code != response.status:
-                            _response_status = response.status
-                            await asyncio.sleep(simple_zero_sleep)
-                            try:
-                                await session.close()
-                            except:
-                                pass
-                            try:
-                                await conn.close()
-                            except:
-                                pass
-                            raise ValueError(f'status code: {_response_status} is not equal to filter: {self.app_config.status_code}')
-
                     _default_record = create_template_struct(target)
                     if target.ssl_check:
                         cert = convert_bytes_to_cert(response.peer_cert)
@@ -364,8 +349,7 @@ class TargetWorker:
                         except Exception as e:
                             pass
                         else:
-                            check_filter: bool = filter_bytes(buffer, target)
-                            if check_filter:
+                            if filter_bytes(buffer, target):
                                 _default_record['data']['http']['result']['response']['content_length'] = len(buffer)
                                 _default_record['data']['http']['result']['response']['body'] = ''
                                 try:
@@ -388,15 +372,6 @@ class TargetWorker:
                                         _default_record['data']['http']['result']['response'][f'body_{namehash}'] = hm.hexdigest()
                                 except Exception as e:
                                     pass
-                                if not self.app_config.without_hexdump:
-                                    _default_record['data']['http']['result']['response']['body_hexdump'] = ''
-                                    try:
-                                        hdump = hexdump(buffer, result='return')
-                                        _output = b64encode(bytes(hdump, 'utf-8'))
-                                        output = _output.decode('utf-8')
-                                        _default_record['data']['http']['result']['response']['body_hexdump'] = output
-                                    except Exception as e:
-                                        pass
                                 result = update_line(_default_record, target)
                             else:
                                 # TODO: добавить статус success-not-contain для обозначения того,
@@ -405,17 +380,13 @@ class TargetWorker:
                     if result:
                         if not result['ip']:
                             result['ip'] = return_ip_from_deep(session, response)
-                await asyncio.sleep(simple_zero_sleep)
-                try:
-                    await session.close()
-                except:
-                    pass
-                try:
-                    await conn.close()
-                except:
-                    pass
             except Exception as exp:
-                result = create_error_template(target, str(exp))
+                error_str = ''
+                try:
+                    error_str = exp.strerror
+                except:
+                    pass
+                result = create_error_template(target, error_str, type(exp).__name__)
                 await asyncio.sleep(simple_zero_sleep)
                 try:
                     await session.close()
@@ -425,30 +396,44 @@ class TargetWorker:
                     await conn.close()
                 except:
                     pass
-            await self.send_result(result=result)
-
-    async def send_result(self, result: Optional[Dict]):
-        if result:
-            if 'duration' in self.trace_request_ctx:
-                request_duration = self.trace_request_ctx['duration']
-                result['data']['http']['duration'] = request_duration
-            success = access_dot_path(result, "data.http.status")
-            if self.stats:
-                if success == "success":
-                    self.stats.count_good += 1
-                else:
-                    self.stats.count_error += 1
-            line = None
-            try:
-                if self.success_only:
+            if result:
+                success = access_dot_path(result, "data.http.status")
+                if self.stats:
                     if success == "success":
+                        self.stats.count_good += 1
+                    else:
+                        self.stats.count_error += 1
+                if not (self.app_config.status_code == CONST_ANY_STATUS):
+                    response_status = access_dot_path(result, 'data.http.result.response.status_code')
+                    if response_status:
+                        if self.app_config.status_code != response_status:
+                            error_str = f'status code: {response_status} is not equal to filter: {self.app_config.status_code}'
+                            result = create_error_template(target, error_str=error_str, status_string='success-not-need-status')
+                            self.stats.count_good -= 1
+                            self.stats.count_error += 1
+                line = None
+                try:
+                    if self.success_only:
+                        if success == "success":
+                            line = ujson_dumps(result)
+                    else:
                         line = ujson_dumps(result)
-                else:
-                    line = ujson_dumps(result)
-            except Exception:
+                except Exception:
+                    pass
+                if line:
+                    await self.output_queue.put(line)
+
+            await asyncio.sleep(simple_zero_sleep)
+            try:
+                await session.close()
+            except:
                 pass
-            if line:
-                await self.output_queue.put(line)
+            try:
+                await conn.close()
+            except:
+                pass
+
+
 
 
 def create_io_reader(stats: Stats, queue_input: Queue, target: TargetConfig, app_config: AppConfig) -> TargetReader:
