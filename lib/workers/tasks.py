@@ -362,16 +362,17 @@ class TargetWorker:
                                         _default_record['data']['http']['result']['response']['body_raw'] = _base64_data
                                     except Exception as e:
                                         pass
-                                try:
-                                    hashs = {'sha256': sha256,
-                                             'sha1': sha1,
-                                             'md5': md5}
-                                    for namehash, func in hashs.items():
-                                        hm = func()
-                                        hm.update(buffer)
-                                        _default_record['data']['http']['result']['response'][f'body_{namehash}'] = hm.hexdigest()
-                                except Exception as e:
-                                    pass
+                                if not self.app_config.without_hashs:
+                                    try:
+                                        hashs = {'sha256': sha256,
+                                                 'sha1': sha1,
+                                                 'md5': md5}
+                                        for namehash, func in hashs.items():
+                                            hm = func()
+                                            hm.update(buffer)
+                                            _default_record['data']['http']['result']['response'][f'body_{namehash}'] = hm.hexdigest()
+                                    except Exception as e:
+                                        pass
                                 result = update_line(_default_record, target)
                             else:
                                 # TODO: добавить статус success-not-contain для обозначения того,

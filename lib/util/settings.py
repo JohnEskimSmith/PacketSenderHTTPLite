@@ -48,6 +48,7 @@ def parse_args():
 
     # region add options
     parser.add_argument('--without-base64', dest='without_base64', action='store_true')
+    parser.add_argument('--without-hashs', dest='without_hashs', action='store_true')
     parser.add_argument('--without-cert', dest='without_certraw', action='store_true')
     parser.add_argument('--full-headers', dest='full_headers', type=str, default=None)
     parser.add_argument('--full-headers-base64', dest='full_headers_base64', type=str, default=None)
@@ -240,6 +241,7 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'endpoint': args.endpoint,
         'status_code': args.status_code,
         'without_base64': args.without_base64,
+        'without_hashs': args.without_hashs,
         'without_certraw': args.without_certraw,
         'proxy_connections': proxy_connections
     })
