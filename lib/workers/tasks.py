@@ -8,7 +8,7 @@ from hexdump import hexdump
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from ssl import _create_unverified_context as ssl_create_unverified_context
 from typing import Optional, Callable, Any, Coroutine, Dict
-from aiohttp import ClientSession, ClientTimeout, TCPConnector, ClientResponse, TraceConfig
+from aiohttp import ClientSession, ClientTimeout, TCPConnector, ClientResponse, TraceConfig, AsyncResolver
 from aioconsole import ainput
 from aiofiles import open as aiofiles_open
 from ujson import dumps as ujson_dumps
@@ -294,12 +294,16 @@ class TargetWorker:
         async with self.semaphore:
             result = None
             timeout = ClientTimeout(total=target.total_timeout)
+
+            # region tmp disable
             # trace_config = TraceConfig()
             # trace_config.on_request_start.append(on_request_start)
             # trace_config.on_request_end.append(on_request_end)
+            # endregion
 
+            # https://github.com/aio-libs/aiohttp/issues/2228
             if target.ssl_check:
-                conn = TCPConnector(ssl=False, limit_per_host=0)
+                conn = TCPConnector(ssl=False, limit_per_host=0, resolver=AsyncResolver())
                 session = ClientSession(
                     timeout=timeout,
                     connector=conn,
@@ -307,7 +311,7 @@ class TargetWorker:
                 simple_zero_sleep = 0.250
             else:
                 simple_zero_sleep = 0.001
-                session = ClientSession(timeout=timeout)
+                ClientSession(connector=TCPConnector(resolver=AsyncResolver()), timeout=timeout)
             selected_proxy_connection = None
             try:
                 selected_proxy_connection = next(self.app_config.proxy_connections)
