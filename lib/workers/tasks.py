@@ -311,7 +311,7 @@ class TargetWorker:
                 simple_zero_sleep = 0.250
             else:
                 simple_zero_sleep = 0.001
-                ClientSession(connector=TCPConnector(resolver=AsyncResolver()), timeout=timeout)
+                session = ClientSession(connector=TCPConnector(resolver=AsyncResolver()), timeout=timeout)
             selected_proxy_connection = None
             try:
                 selected_proxy_connection = next(self.app_config.proxy_connections)
