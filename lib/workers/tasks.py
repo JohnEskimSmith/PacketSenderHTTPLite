@@ -4,7 +4,6 @@ from abc import ABC
 from asyncio import Queue
 from base64 import b64encode
 from hashlib import sha256, sha1, md5
-from hexdump import hexdump
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from ssl import _create_unverified_context as ssl_create_unverified_context
 from typing import Optional, Callable, Any, Coroutine, Dict
@@ -258,7 +257,7 @@ class TargetWorker:
         self.output_queue = output_queue
         self.app_config = app_config
         self.success_only = app_config.show_only_success
-        # self.trace_request_ctx = {'request': True}
+        self.trace_request_ctx = {'request': True}
 
     # noinspection PyBroadException
     async def do(self, target: Target):
@@ -296,22 +295,29 @@ class TargetWorker:
             timeout = ClientTimeout(total=target.total_timeout)
 
             # region tmp disable
-            # trace_config = TraceConfig()
-            # trace_config.on_request_start.append(on_request_start)
-            # trace_config.on_request_end.append(on_request_end)
+            trace_config = TraceConfig()
+            trace_config.on_request_start.append(on_request_start)
+            trace_config.on_request_end.append(on_request_end)
             # endregion
 
             # https://github.com/aio-libs/aiohttp/issues/2228
             if target.ssl_check:
-                conn = TCPConnector(ssl=False, limit_per_host=0, resolver=AsyncResolver())
+                # need patch AsyncResolver not work with python3.9.5
+                # but work with python3.8.10
+                # conn = TCPConnector(ssl=False, limit_per_host=0, resolver=AsyncResolver(nameservers=['1.1.1.1', '8.8.8.8']))
+                conn = TCPConnector(ssl=False, limit_per_host=0)
                 session = ClientSession(
                     timeout=timeout,
                     connector=conn,
-                    response_class=WrappedResponseClass)
+                    response_class=WrappedResponseClass,
+                    trace_configs=[trace_config])
                 simple_zero_sleep = 0.250
             else:
                 simple_zero_sleep = 0.001
-                session = ClientSession(connector=TCPConnector(resolver=AsyncResolver()), timeout=timeout)
+                # need patch AsyncResolver not work with python3.9.5
+                # but work with python3.8.10
+                # session = ClientSession(connector=TCPConnector(resolver=AsyncResolver(nameservers=['1.1.1.1', '8.8.8.8'])), timeout=timeout)
+                session = ClientSession(connector=TCPConnector(limit_per_host=0), timeout=timeout, trace_configs=[trace_config])
             selected_proxy_connection = None
             try:
                 selected_proxy_connection = next(self.app_config.proxy_connections)
@@ -325,7 +331,8 @@ class TargetWorker:
                                            cookies=target.cookies,
                                            allow_redirects=target.allow_redirects,
                                            data=target.payload,
-                                           proxy=selected_proxy_connection) as response:
+                                           proxy=selected_proxy_connection,
+                                           trace_request_ctx=self.trace_request_ctx) as response:
                     _default_record = create_template_struct(target)
                     if target.ssl_check:
                         cert = convert_bytes_to_cert(response.peer_cert)
@@ -402,6 +409,9 @@ class TargetWorker:
                 except:
                     pass
             if result:
+                if 'duration' in self.trace_request_ctx:
+                    request_duration = self.trace_request_ctx['duration']
+                    result['data']['http']['duration'] = request_duration
                 success = access_dot_path(result, "data.http.status")
                 if self.stats:
                     if success == "success":
