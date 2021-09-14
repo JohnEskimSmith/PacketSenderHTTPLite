@@ -304,8 +304,10 @@ class TargetWorker:
             if target.ssl_check:
                 # need patch AsyncResolver not work with python3.9.5
                 # but work with python3.8.10
-                # conn = TCPConnector(ssl=False, limit_per_host=0, resolver=AsyncResolver(nameservers=['1.1.1.1', '8.8.8.8']))
-                conn = TCPConnector(ssl=False, limit_per_host=0)
+                conn = TCPConnector(ssl=False,
+                                    limit_per_host=0,
+                                    resolver=AsyncResolver(nameservers=['1.1.1.1', '1.0.0.1', '8.8.8.8', '8.8.4.4']))
+                # conn = TCPConnector(ssl=False, limit_per_host=0)
                 session = ClientSession(
                     timeout=timeout,
                     connector=conn,
@@ -317,7 +319,9 @@ class TargetWorker:
                 # need patch AsyncResolver not work with python3.9.5
                 # but work with python3.8.10
                 # session = ClientSession(connector=TCPConnector(resolver=AsyncResolver(nameservers=['1.1.1.1', '8.8.8.8'])), timeout=timeout)
-                session = ClientSession(connector=TCPConnector(limit_per_host=0), timeout=timeout, trace_configs=[trace_config])
+                session = ClientSession(connector=TCPConnector(limit_per_host=0, resolver=AsyncResolver(nameservers=['1.1.1.1', '1.0.0.1', '8.8.8.8', '8.8.4.4'])),
+                                        timeout=timeout,
+                                        trace_configs=[trace_config])
             selected_proxy_connection = None
             try:
                 selected_proxy_connection = next(self.app_config.proxy_connections)
