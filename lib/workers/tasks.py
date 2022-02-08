@@ -299,15 +299,15 @@ class TargetWorker:
             trace_config.on_request_start.append(on_request_start)
             trace_config.on_request_end.append(on_request_end)
             # endregion
-
-            # https://github.com/aio-libs/aiohttp/issues/2228
+            resolver = AsyncResolver(nameservers=['8.8.8.8', '8.8.4.4'])
+            # resolver = None
+            # https://github.com/aio-libs/aiohttp/issues/2228  - closed
             if target.ssl_check:
-                # need patch AsyncResolver not work with python3.9.5
-                # but work with python3.8.10
+
                 conn = TCPConnector(ssl=False,
+                                    family=2, # need set current family (only IPv4)
                                     limit_per_host=0,
-                                    resolver=AsyncResolver(nameservers=['1.1.1.1', '1.0.0.1', '8.8.8.8', '8.8.4.4']))
-                # conn = TCPConnector(ssl=False, limit_per_host=0)
+                                    resolver=resolver)
                 session = ClientSession(
                     timeout=timeout,
                     connector=conn,
@@ -316,10 +316,9 @@ class TargetWorker:
                 simple_zero_sleep = 0.250
             else:
                 simple_zero_sleep = 0.001
-                # need patch AsyncResolver not work with python3.9.5
-                # but work with python3.8.10
-                # session = ClientSession(connector=TCPConnector(resolver=AsyncResolver(nameservers=['1.1.1.1', '8.8.8.8'])), timeout=timeout)
-                session = ClientSession(connector=TCPConnector(limit_per_host=0, resolver=AsyncResolver(nameservers=['1.1.1.1', '1.0.0.1', '8.8.8.8', '8.8.4.4'])),
+                session = ClientSession(connector=TCPConnector(limit_per_host=0,
+                                                               family=2,  # need set current family (only IPv4)
+                                                               resolver=resolver),
                                         timeout=timeout,
                                         trace_configs=[trace_config])
             selected_proxy_connection = None
@@ -451,8 +450,6 @@ class TargetWorker:
                 await conn.close()
             except:
                 pass
-
-
 
 
 def create_io_reader(stats: Stats, queue_input: Queue, target: TargetConfig, app_config: AppConfig) -> TargetReader:

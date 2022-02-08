@@ -1,10 +1,12 @@
 aioconsole
 ujson==1.35
-async_timeout==3.0.1
+async_timeout
 hexdump
 aiofiles
-aiohttp
+aiohttp[speedups]
 uvloop
 cryptography
-
-
+uvloop
+aiofiles
+urllib3
+aiodns
