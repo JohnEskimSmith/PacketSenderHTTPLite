@@ -5,7 +5,6 @@ __license__ = "GPLv3"
 __status__ = "Dev"
 
 import asyncio
-
 import uvloop
 from aiofiles import open as aiofiles_open
 import importlib

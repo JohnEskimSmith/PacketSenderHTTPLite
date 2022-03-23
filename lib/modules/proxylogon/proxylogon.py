@@ -1,33 +1,17 @@
 from lib.workers import TargetWorker, on_request_end, on_request_start, WrappedResponseClass
-from lib.core import create_error_template, Target
-import abc
-import asyncio
+
 from re import findall
-from abc import ABC
-from asyncio import Queue
-from base64 import b64encode
-from hashlib import sha256, sha1, md5
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from ssl import _create_unverified_context as ssl_create_unverified_context
-from typing import Optional, Callable, Any, Coroutine, Dict
-from aiohttp import ClientSession, ClientTimeout, TCPConnector, ClientResponse, TraceConfig, AsyncResolver
-from aioconsole import ainput
-from aiofiles import open as aiofiles_open
+
+from aiohttp import ClientSession, ClientTimeout, TCPConnector, TraceConfig, AsyncResolver
 from ujson import dumps as ujson_dumps
-from lib.core import create_template_struct, convert_bytes_to_cert, create_error_template, Stats, AppConfig, \
-    Target, TargetConfig, CONST_ANY_STATUS
-from lib.util import access_dot_path, is_ip, filter_bytes, write_to_file, write_to_stdout, read_http_content
+from lib.core import create_template_struct, convert_bytes_to_cert, create_error_template, Target
+from lib.util import access_dot_path, is_ip, read_http_content
 from urllib.parse import urljoin
-import abc
-import asyncio
-from abc import ABC
-from asyncio import Queue
 from base64 import b64encode
-
 import asyncio
 
-from pathlib import Path
-from typing import Dict
 
 class CustomWorker(TargetWorker):
     async def do(self, target: Target):
