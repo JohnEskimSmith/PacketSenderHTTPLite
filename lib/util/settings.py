@@ -45,7 +45,10 @@ def parse_args():
     parser.add_argument("--proxy-generator", type=str, dest='proxy_connection_generator', help='not implemented ')
     parser.add_argument("--proxy-source", type=str, dest='proxy_source', help='not implemented ')
     # endregion
-
+    # region add custom worker
+    parser.add_argument('--module', dest='custom_module', type=str, default='default',
+                        help='set custom module(from modules)')
+    # endregion
     # region add options
     parser.add_argument('--without-base64', dest='without_base64', action='store_true')
     parser.add_argument('--without-hashs', dest='without_hashs', action='store_true')
@@ -226,7 +229,6 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'allow_redirects':args.allow_redirects
     })
 
-
     app_settings = AppConfig(**{
         'senders': args.senders,
         'queue_sleep': args.queue_sleep,
@@ -243,7 +245,8 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'without_base64': args.without_base64,
         'without_hashs': args.without_hashs,
         'without_certraw': args.without_certraw,
-        'proxy_connections': proxy_connections
+        'proxy_connections': proxy_connections,
+        'custom_module': args.custom_module
     })
     return target_settings, app_settings
 

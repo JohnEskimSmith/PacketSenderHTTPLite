@@ -22,6 +22,7 @@ class AppConfig:
     without_certraw: bool
     without_hashs: bool
     proxy_connections: iter
+    custom_module: str
 
 
 @dataclass(frozen=False)

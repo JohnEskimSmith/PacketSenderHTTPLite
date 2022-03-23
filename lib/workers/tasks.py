@@ -16,8 +16,9 @@ from lib.core import create_template_struct, convert_bytes_to_cert, create_error
 from lib.util import access_dot_path, is_ip, filter_bytes, write_to_file, write_to_stdout, read_http_content
 from .factories import create_targets_http_protocol
 
-__all__ = ['QueueWorker', 'TargetReader', 'TargetFileReader', 'TargetStdinReader', 'TaskProducer', 'Executor',
-           'OutputPrinter', 'TargetWorker', 'create_io_reader', 'get_async_writer']
+__all__ = ['QueueWorker', 'TargetReader', 'TargetFileReader', 'TargetStdinReader', 'TaskProducer',
+           'Executor', 'OutputPrinter', 'TargetWorker', 'create_io_reader', 'get_async_writer',
+           'on_request_start', 'on_request_end', 'WrappedResponseClass']
 
 STOP_SIGNAL = b'check for end'
 
