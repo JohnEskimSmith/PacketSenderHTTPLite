@@ -119,7 +119,8 @@ class TargetFileReader(TargetReader):
         async with aiofiles_open(self.file_path, mode='rt') as f:
             async for line in f:
                 linein = line.strip()
-                await self.producer.send(linein)
+                if linein:
+                    await self.producer.send(linein)
 
         await self.producer.send_stop()
 

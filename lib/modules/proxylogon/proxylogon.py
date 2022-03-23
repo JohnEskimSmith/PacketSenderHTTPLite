@@ -95,41 +95,9 @@ class CustomWorker(TargetWorker):
             # step 1
             url_step1 = urljoin(target.url, '/owa/')
             exchange_version = None
-            async with session.request(target.method,
-                                       url_step1,
-                                       timeout=timeout,
-                                       headers=target.headers,
-                                       cookies=target.cookies,
-                                       allow_redirects=target.allow_redirects,
-                                       data=target.payload,
-                                       proxy=selected_proxy_connection,
-                                       trace_request_ctx=self.trace_request_ctx) as response:
-                _default_record = create_template_struct(target)
-                if target.ssl_check:
-                    cert = convert_bytes_to_cert(response.peer_cert)
-                    if not self.app_config.without_certraw:
-                        _default_record['data']['http']['result']['response']['request']['tls_log']['handshake_log'][
-                            'server_certificates']['certificate']['raw'] = b64encode(response.peer_cert).decode(
-                            'utf-8')
-                    if cert:
-                        _default_record['data']['http']['result']['response']['request']['tls_log'][
-                            'handshake_log']['server_certificates']['certificate']['parsed'] = cert
-                _default_record['data']['http']['status'] = "success"
-                _default_record['data']['http']['result']['response']['status_code'] = response.status
-                # region
-                _header = {}
-                for key in response.headers:
-                    _header[key.lower().replace('-', '_')] = response.headers.getall(key)
-                _default_record['data']['http']['result']['response']['headers'] = _header
-                _tmp_headers = ujson_dumps(_default_record['data']['http']['result']['response']['headers'])
-                if 'X-OWA-Version'.lower().replace('-', '_') in _tmp_headers:
-                    exchange_version = response.headers['X-OWA-Version']
-            if not exchange_version:
-                _value_sub_url = target.url[8:-1]
-                url_step2 = f'{target.url[:-1]}/owa/auth/logon.aspx?' \
-                            f'replaceCurrent=1&url=https%3a%2f%2f{_value_sub_url}%2fowa'
+            try:
                 async with session.request(target.method,
-                                           url_step2,
+                                           url_step1,
                                            timeout=timeout,
                                            headers=target.headers,
                                            cookies=target.cookies,
@@ -137,27 +105,32 @@ class CustomWorker(TargetWorker):
                                            data=target.payload,
                                            proxy=selected_proxy_connection,
                                            trace_request_ctx=self.trace_request_ctx) as response:
-                    if target.method in ['GET', 'POST', 'PUT', 'DELETE', 'UPDATE']:
-                        buffer = b""
-                        try:
-                            read_c = asyncio.wait_for(read_http_content(response, n=target.max_size),
-                                                      timeout=target.total_timeout)
-                            buffer = await read_c
-                        except Exception as e:
-                            pass
-                        else:
-                            response_test = buffer.decode()
-                            exchange_version = findall('<link\s[^>]*href="/owa/[^"]*?([\d.]+)/themes/resources/favicon.ico',
-                                                       response_test)
-                            if exchange_version:
-                                exchange_version = exchange_version[0]
-            if exchange_version:
-                part_list = exchange_version.split('.')
-                if len(part_list) != 4:
-                    url_step3 = f'{target.url[:-1]}/ecp/Current/exporttool/' \
-                                'microsoft.exchange.ediscovery.exporttool.application'
+                    _default_record = create_template_struct(target)
+                    if target.ssl_check:
+                        cert = convert_bytes_to_cert(response.peer_cert)
+                        if not self.app_config.without_certraw:
+                            _default_record['data']['http']['result']['response']['request']['tls_log']['handshake_log'][
+                                'server_certificates']['certificate']['raw'] = b64encode(response.peer_cert).decode(
+                                'utf-8')
+                        if cert:
+                            _default_record['data']['http']['result']['response']['request']['tls_log'][
+                                'handshake_log']['server_certificates']['certificate']['parsed'] = cert
+                    _default_record['data']['http']['status'] = "success"
+                    _default_record['data']['http']['result']['response']['status_code'] = response.status
+                    # region
+                    _header = {}
+                    for key in response.headers:
+                        _header[key.lower().replace('-', '_')] = response.headers.getall(key)
+                    _default_record['data']['http']['result']['response']['headers'] = _header
+                    _tmp_headers = ujson_dumps(_default_record['data']['http']['result']['response']['headers'])
+                    if 'X-OWA-Version'.lower().replace('-', '_') in _tmp_headers:
+                        exchange_version = response.headers['X-OWA-Version']
+                if not exchange_version:
+                    _value_sub_url = target.url[8:-1]
+                    url_step2 = f'{target.url[:-1]}/owa/auth/logon.aspx?' \
+                                f'replaceCurrent=1&url=https%3a%2f%2f{_value_sub_url}%2fowa'
                     async with session.request(target.method,
-                                               url_step3,
+                                               url_step2,
                                                timeout=timeout,
                                                headers=target.headers,
                                                cookies=target.cookies,
@@ -165,33 +138,77 @@ class CustomWorker(TargetWorker):
                                                data=target.payload,
                                                proxy=selected_proxy_connection,
                                                trace_request_ctx=self.trace_request_ctx) as response:
-                        if response.status == 200:
-                            if target.method in ['GET', 'POST', 'PUT', 'DELETE', 'UPDATE']:
-                                buffer = b""
-                                try:
-                                    read_c = asyncio.wait_for(read_http_content(response, n=target.max_size),
-                                                              timeout=target.total_timeout)
-                                    buffer = await read_c
-                                except Exception as e:
-                                    pass
-                                else:
-                                    response_test = buffer.decode()
-                                    new_version = findall(
-                                        r'name=\"microsoft.exchange.ediscovery.exporttool.application\" '
-                                        r'version=\"([\d.]+)\"',
-                                        response_test
-                                    )
-                                    if new_version:
-                                        exchange_version = new_version[0]
-            if exchange_version:
-                _default_record['data']['http']['result']['response']['proxylogon'] = exchange_version
-                _default_record['data']['http']['status'] = 'success'
-                result = update_line(_default_record, target)
-            else:
-                result = create_error_template(target, error_str='', status_string='success-not-contain')
-            if result:
-                if not result['ip']:
-                    result['ip'] = return_ip_from_deep(session, response)
+                        if target.method in ['GET', 'POST', 'PUT', 'DELETE', 'UPDATE']:
+                            buffer = b""
+                            try:
+                                read_c = asyncio.wait_for(read_http_content(response, n=target.max_size),
+                                                          timeout=target.total_timeout)
+                                buffer = await read_c
+                            except Exception as e:
+                                pass
+                            else:
+                                response_test = buffer.decode()
+                                exchange_version = findall('<link\s[^>]*href="/owa/[^"]*?([\d.]+)/themes/resources/favicon.ico',
+                                                           response_test)
+                                if exchange_version:
+                                    exchange_version = exchange_version[0]
+                if exchange_version:
+                    part_list = exchange_version.split('.')
+                    if len(part_list) != 4:
+                        url_step3 = f'{target.url[:-1]}/ecp/Current/exporttool/' \
+                                    'microsoft.exchange.ediscovery.exporttool.application'
+                        async with session.request(target.method,
+                                                   url_step3,
+                                                   timeout=timeout,
+                                                   headers=target.headers,
+                                                   cookies=target.cookies,
+                                                   allow_redirects=target.allow_redirects,
+                                                   data=target.payload,
+                                                   proxy=selected_proxy_connection,
+                                                   trace_request_ctx=self.trace_request_ctx) as response:
+                            if response.status == 200:
+                                if target.method in ['GET', 'POST', 'PUT', 'DELETE', 'UPDATE']:
+                                    buffer = b""
+                                    try:
+                                        read_c = asyncio.wait_for(read_http_content(response, n=target.max_size),
+                                                                  timeout=target.total_timeout)
+                                        buffer = await read_c
+                                    except Exception as e:
+                                        pass
+                                    else:
+                                        response_test = buffer.decode()
+                                        new_version = findall(
+                                            r'name=\"microsoft.exchange.ediscovery.exporttool.application\" '
+                                            r'version=\"([\d.]+)\"',
+                                            response_test
+                                        )
+                                        if new_version:
+                                            exchange_version = new_version[0]
+                if exchange_version:
+                    _default_record['data']['http']['result']['response']['proxylogon'] = exchange_version
+                    _default_record['data']['http']['status'] = 'success'
+                    result = update_line(_default_record, target)
+                else:
+                    result = create_error_template(target, error_str='', status_string='success-not-contain')
+                if result:
+                    if not result['ip']:
+                        result['ip'] = return_ip_from_deep(session, response)
+            except Exception as exp:
+                error_str = ''
+                try:
+                    error_str = exp.strerror
+                except:
+                    pass
+                result = create_error_template(target, error_str, type(exp).__name__)
+                await asyncio.sleep(simple_zero_sleep)
+                try:
+                    await session.close()
+                except:
+                    pass
+                try:
+                    await conn.close()
+                except:
+                    pass
             if result:
                 if 'duration' in self.trace_request_ctx:
                     request_duration = self.trace_request_ctx['duration']
