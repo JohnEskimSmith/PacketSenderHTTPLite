@@ -30,7 +30,11 @@ def convert_bytes_to_cert(bytes_cert: bytes) -> dict:
             result['validity']['end'] = result['validity']['end_datetime'].strftime('%Y-%m-%dT%H:%M:%SZ')
             result['validity']['start'] = result['validity']['start_datetime'].strftime('%Y-%m-%dT%H:%M:%SZ')
         except Exception:
-            pass
+            result['validity'] = {}
+            result['validity']['end_datetime'] = None
+            result['validity']['start_datetime'] = None
+            result['validity']['end'] = None
+            result['validity']['start'] = None
         result['issuer'] = {}
         dict_replace = {
             'countryName': 'country',

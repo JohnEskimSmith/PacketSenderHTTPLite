@@ -4,7 +4,6 @@ async_timeout
 hexdump
 aiofiles
 aiohttp[speedups]
-uvloop
 cryptography
 uvloop
 aiofiles

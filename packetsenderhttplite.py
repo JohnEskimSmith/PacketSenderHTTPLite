@@ -15,9 +15,7 @@ from lib.util import parse_settings, parse_args
 from lib.core import Stats
 
 
-async def main():
-    arguments = parse_args()
-    target_settings, config = parse_settings(arguments)
+async def main(target_settings, config):
 
     queue_input = asyncio.Queue()
     queue_tasks = asyncio.Queue()
@@ -50,6 +48,10 @@ async def main():
                          for worker in [input_reader, task_producer, executor, printer]]
         await asyncio.wait(running_tasks)
 
+
 if __name__ == '__main__':
-    uvloop.install()
-    asyncio.run(main())
+    arguments = parse_args()
+    target_settings, config = parse_settings(arguments)
+    if arguments.use_uvloop:
+        uvloop.install()
+    asyncio.run(main(target_settings, config))

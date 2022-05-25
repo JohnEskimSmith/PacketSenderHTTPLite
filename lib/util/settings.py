@@ -22,6 +22,7 @@ def parse_args():
     parser.add_argument('-o', '--output-file', dest='output_file', type=str, help='path to file with results')
     parser.add_argument('-s', '--senders', dest='senders', type=int, default=1024,
                         help='Number of send coroutines to use (default: 1024)')
+    parser.add_argument('--use-uvloop', dest='use_uvloop', action='store_true')
     parser.add_argument('--queue-sleep', dest='queue_sleep', type=int, default=1,
                         help='Sleep duration if the queue is full, default 1 sec. Queue size == senders')
     parser.add_argument('--max-size', dest='max_size', type=int, default=1024,
@@ -43,7 +44,7 @@ def parse_args():
     parser.add_argument("--proxy", type=str, dest='proxy_connection_string',
                         help='proxy connection strings(;): "http://myproxy.com" or "http://user:pass@some.proxy.com"')
     parser.add_argument("--proxy-generator", type=str, dest='proxy_connection_generator', help='not implemented ')
-    parser.add_argument("--proxy-source", type=str, dest='proxy_source', help='not implemented ')
+    parser.add_argument("--proxy-source", type=str, dest='proxy_source', help='not implemented')
     # endregion
     # region add custom worker
     parser.add_argument('--module', dest='custom_module', type=str, default='default',
@@ -53,8 +54,10 @@ def parse_args():
     parser.add_argument('--without-base64', dest='without_base64', action='store_true')
     parser.add_argument('--without-hashs', dest='without_hashs', action='store_true')
     parser.add_argument('--without-cert', dest='without_certraw', action='store_true')
-    parser.add_argument('--full-headers', dest='full_headers', type=str, default=None)
-    parser.add_argument('--full-headers-base64', dest='full_headers_base64', type=str, default=None)
+    parser.add_argument('--full-headers', dest='full_headers', type=str, default=None, help='JSON as string')
+    # TODO: &
+    parser.add_argument('--full-headers-base64', dest='full_headers_base64', type=str, default=None, help='not implemented')
+
     parser.add_argument('--full-headers-hex', dest='full_headers_hex', type=str, default=None)
     parser.add_argument('--full-cookies', dest='full_cookies', type=str, default=None, help='http cookies as json string')
     parser.add_argument('--full-cookies-hex', dest='full_cookies_hex', type=str, default=None, help='http cookies as json string(hex)')
