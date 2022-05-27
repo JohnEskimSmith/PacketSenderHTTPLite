@@ -17,6 +17,7 @@ from itertools import cycle
 
 __all__ = ['parse_args', 'parse_settings', 'check_config_url', 'download_module', 'load_custom_worker']
 
+NAME_CUSTOM_WORKER_CLASS = 'CustomWorker'
 
 def parse_args():
 
@@ -284,46 +285,70 @@ def parse_settings_file(file_path: str) -> Tuple[TargetConfig, AppConfig]:
     raise NotImplementedError('config read')
 
 
-async def download_module(url_auth: Optional[Tuple], proj_root: "Path") -> Optional[str]:
+def check_prefix_directory(prefix_hash: str, path_directory_modules: "Path") -> Tuple[bool, str]:
+    try:
+        if path_directory_modules.is_dir():
+            if not (path_directory_modules / '__init__.py').exists():
+                (path_directory_modules / '__init__.py').touch()
+            all_directory_data = path_directory_modules.glob(f'{prefix_hash}*/{prefix_hash}*')
+            for record in all_directory_data:
+                if record.is_file():
+                    if record.stat().st_size > 0:
+                        return True, record.stem
+        return False, ''
+    except Exception as exp:
+        return False, str(exp)
+
+
+async def download_module(url_auth: Optional[Tuple],
+                          proj_root: "Path",
+                          directory_modules: str) -> Optional[str]:
     url, auth = url_auth
     basic_auth = BasicAuth(auth) if auth else None
     status = False
-    try:
-        filename_module_prefix = haslib_md5(url.encode()).hexdigest()
-        async with aiohttp_ClientSession(auth=basic_auth) as client:
-            async with client.get(url, ssl=False, timeout=30) as response:
-                if response.status == 200:
-                    data = await response.read()
-                    filename_module_suffix = haslib_md5(data).hexdigest()
-                    filename_module = f'{filename_module_prefix}_{filename_module_suffix}'
-                    async with aiofiles_open(f'/tmp/{filename_module}', 'wb') as file_tmp:
-                        await file_tmp.write(data)
-        file_downloaded = Path(f'/tmp/{filename_module}')
-        if file_downloaded.stat().st_size > 0:
-            status = True
-    except Exception as e:
-        print(f'exit, error: {e}')
-        exit(1)
+    filename_module_prefix = haslib_md5(url.encode()).hexdigest()
+    path_directory_modules = proj_root / 'lib' /directory_modules
+    status_exists_custom_module, name_module = check_prefix_directory(filename_module_prefix, path_directory_modules)
+    if status_exists_custom_module:
+        return name_module
     else:
-        if status:
-            try:
-                ready_module = proj_root / 'lib' / 'modules' / filename_module
-                if not ready_module.exists():
-                    ready_module.mkdir(exist_ok=True)
-                shutil_copy(file_downloaded, ready_module / f'{filename_module}.py')
-                _init = ready_module / '__init__.py'
-                _init.touch()
-                return str(filename_module)
-            except Exception as e:
-                print(f'exit, error: {e}')
-                exit(1)
+        if name_module:
+            print(f'errors: {name_module}')
+        try:
+            async with aiohttp_ClientSession(auth=basic_auth) as client:
+                async with client.get(url, ssl=False, timeout=30) as response:
+                    if response.status == 200:
+                        data = await response.read()
+                        filename_module_suffix = haslib_md5(data).hexdigest()
+                        filename_module = f'{filename_module_prefix}_{filename_module_suffix}'
+                        async with aiofiles_open(f'/tmp/{filename_module}', 'wb') as file_tmp:
+                            await file_tmp.write(data)
+            file_downloaded = Path(f'/tmp/{filename_module}')
+            if file_downloaded.stat().st_size > 0:
+                status = True
+        except Exception as e:
+            print(f'exit, error: {e}')
+            exit(1)
+        else:
+            if status:
+                try:
+                    ready_module = proj_root / 'lib' / directory_modules / filename_module
+                    if not ready_module.exists():
+                        ready_module.mkdir(exist_ok=True)
+                    shutil_copy(file_downloaded, ready_module / f'{filename_module}.py')
+                    _init = ready_module / '__init__.py'
+                    _init.touch()
+                    return str(filename_module)
+                except Exception as e:
+                    print(f'exit, error: {e}')
+                    exit(1)
 
 
-def load_custom_worker(config_custom_module):
+def load_custom_worker(config_custom_module, directory_modules):
     try:
-        module_name = f'lib.modules.{config_custom_module}.{config_custom_module}'
+        module_name = f'lib.{directory_modules}.{config_custom_module}.{config_custom_module}'
         _mod = importlib.import_module(module_name)
-        custom_worker = getattr(_mod, 'CustomWorker')
+        custom_worker = getattr(_mod, NAME_CUSTOM_WORKER_CLASS)
         return custom_worker
     except Exception as e:
         print(f'exit, error: {e}')

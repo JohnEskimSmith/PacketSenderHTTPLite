@@ -15,6 +15,9 @@ from lib.workers import get_async_writer, create_io_reader, TargetReader, TaskPr
 from lib.util import parse_settings, parse_args, check_config_url, load_custom_worker, download_module
 from lib.core import Stats, TargetConfig, AppConfig
 
+DEFAULT_MODULES_DIR = 'modules'
+DEFAULT_CUSTOM_MODULES_DIR = 'custom_modules'
+
 PROJ_ROOT = Path(__file__).parent
 
 
@@ -31,14 +34,18 @@ async def main(target_settings, config):
     async with aiofiles_open(config.output_file, mode=config.write_mode) as file_with_results:
         writer_coroutine = get_async_writer(config)
         about_custom_module = config.custom_module
+        directory_modules = DEFAULT_MODULES_DIR
         if config.url_custom_module:
             url_auth: Optional[Tuple] = check_config_url(config.url_custom_module)
             if url_auth:
-                about_custom_module = await download_module(url_auth, proj_root=PROJ_ROOT)
+                about_custom_module = await download_module(url_auth,
+                                                            proj_root=PROJ_ROOT,
+                                                            directory_modules=DEFAULT_CUSTOM_MODULES_DIR)
+                directory_modules = DEFAULT_CUSTOM_MODULES_DIR
         if about_custom_module == 'default':
             target_worker = TargetWorker(statistics, task_semaphore, queue_prints, config)
         else:
-            CustomWorker = load_custom_worker(about_custom_module)
+            CustomWorker = load_custom_worker(about_custom_module, directory_modules)
             target_worker = CustomWorker(statistics, task_semaphore, queue_prints, config)
 
         input_reader: TargetReader = create_io_reader(statistics, queue_input, target_settings, config)
