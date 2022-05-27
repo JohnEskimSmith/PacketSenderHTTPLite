@@ -23,6 +23,7 @@ class AppConfig:
     without_hashs: bool
     proxy_connections: iter
     custom_module: str
+    url_custom_module: str
 
 
 @dataclass(frozen=False)

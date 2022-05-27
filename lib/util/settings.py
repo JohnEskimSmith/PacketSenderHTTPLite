@@ -1,14 +1,21 @@
 import argparse
+import importlib
 from os import path
 from sys import stderr
-from typing import Tuple
+from aiofiles import open as aiofiles_open
+from typing import Tuple, Optional
+from urllib.parse import urlparse
+from aiohttp import ClientSession as aiohttp_ClientSession, BasicAuth
+from pathlib import Path
+from shutil import copy as shutil_copy
+from hashlib import md5 as haslib_md5
 from random import choice
 from ujson import loads as ujson_loads
 from .io import decode_base64_string
 from lib.core import return_payloads_from_files, AppConfig, TargetConfig, CONST_ANY_STATUS
 from itertools import cycle
 
-__all__ = ['parse_args', 'parse_settings']
+__all__ = ['parse_args', 'parse_settings', 'check_config_url', 'download_module', 'load_custom_worker']
 
 
 def parse_args():
@@ -23,6 +30,7 @@ def parse_args():
     parser.add_argument('-s', '--senders', dest='senders', type=int, default=1024,
                         help='Number of send coroutines to use (default: 1024)')
     parser.add_argument('--use-uvloop', dest='use_uvloop', action='store_true')
+    parser.add_argument('--delete-custom', dest='delete_custom', action='store_true')  # TODO: rethink
     parser.add_argument('--queue-sleep', dest='queue_sleep', type=int, default=1,
                         help='Sleep duration if the queue is full, default 1 sec. Queue size == senders')
     parser.add_argument('--max-size', dest='max_size', type=int, default=1024,
@@ -49,6 +57,10 @@ def parse_args():
     # region add custom worker
     parser.add_argument('--module', dest='custom_module', type=str, default='default',
                         help='set custom module(from modules)')
+
+    parser.add_argument('--url-module', dest='url_custom_module', type=str,
+                        help='set url for download custom module')
+
     # endregion
     # region add options
     parser.add_argument('--without-base64', dest='without_base64', action='store_true')
@@ -56,11 +68,15 @@ def parse_args():
     parser.add_argument('--without-cert', dest='without_certraw', action='store_true')
     parser.add_argument('--full-headers', dest='full_headers', type=str, default=None, help='JSON as string')
     # TODO: &
-    parser.add_argument('--full-headers-base64', dest='full_headers_base64', type=str, default=None, help='not implemented')
+    parser.add_argument('--full-headers-base64', dest='full_headers_base64',
+                        type=str, default=None, help='not implemented')
 
     parser.add_argument('--full-headers-hex', dest='full_headers_hex', type=str, default=None)
-    parser.add_argument('--full-cookies', dest='full_cookies', type=str, default=None, help='http cookies as json string')
-    parser.add_argument('--full-cookies-hex', dest='full_cookies_hex', type=str, default=None, help='http cookies as json string(hex)')
+    parser.add_argument('--full-cookies', dest='full_cookies',
+                        type=str, default=None, help='http cookies as json string')
+
+    parser.add_argument('--full-cookies-hex', dest='full_cookies_hex',
+                        type=str, default=None, help='http cookies as json string(hex)')
     # endregion
 
     # region filters
@@ -83,7 +99,9 @@ def parse_args():
     parser.add_argument('--single-payload-pickle-hex', dest='single_payload_pickle_hex', type=str,
                         help='python pickle object in hex(bytes)')
     parser.add_argument('--single-payload-type', dest='single_payload_type', type=str,
-                        default='DATA', help="single payload type: DATA(raw bin), JSON, FILES(like at requests - Dictionary of 'filename': file-like-objects for multipart encoding upload)")
+                        default='DATA',
+                        help="single payload type: DATA(raw bin), JSON, "
+                             "FILES(like at requests - Dictionary of 'filename': file-like-objects for multipart encoding upload)")
 
     parser.add_argument('--python-payloads', dest='python_payloads', type=str, help='path to Python module')
     parser.add_argument('--generator-payloads', dest='generator_payloads', type=str,
@@ -249,7 +267,8 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'without_hashs': args.without_hashs,
         'without_certraw': args.without_certraw,
         'proxy_connections': proxy_connections,
-        'custom_module': args.custom_module
+        'custom_module': args.custom_module,
+        'url_custom_module': args.url_custom_module
     })
     return target_settings, app_settings
 
@@ -263,6 +282,66 @@ def abort(message: str, exc: Exception = None, exit_code: int = 1):
 
 def parse_settings_file(file_path: str) -> Tuple[TargetConfig, AppConfig]:
     raise NotImplementedError('config read')
+
+
+async def download_module(url_auth: Optional[Tuple], proj_root: "Path") -> Optional[str]:
+    url, auth = url_auth
+    basic_auth = BasicAuth(auth) if auth else None
+    status = False
+    try:
+        filename_module_prefix = haslib_md5(url.encode()).hexdigest()
+        async with aiohttp_ClientSession(auth=basic_auth) as client:
+            async with client.get(url, ssl=False, timeout=30) as response:
+                if response.status == 200:
+                    data = await response.read()
+                    filename_module_suffix = haslib_md5(data).hexdigest()
+                    filename_module = f'{filename_module_prefix}_{filename_module_suffix}'
+                    async with aiofiles_open(f'/tmp/{filename_module}', 'wb') as file_tmp:
+                        await file_tmp.write(data)
+        file_downloaded = Path(f'/tmp/{filename_module}')
+        if file_downloaded.stat().st_size > 0:
+            status = True
+    except Exception as e:
+        print(f'exit, error: {e}')
+        exit(1)
+    else:
+        if status:
+            try:
+                ready_module = proj_root / 'lib' / 'modules' / filename_module
+                if not ready_module.exists():
+                    ready_module.mkdir(exist_ok=True)
+                shutil_copy(file_downloaded, ready_module / f'{filename_module}.py')
+                _init = ready_module / '__init__.py'
+                _init.touch()
+                return str(filename_module)
+            except Exception as e:
+                print(f'exit, error: {e}')
+                exit(1)
+
+
+def load_custom_worker(config_custom_module):
+    try:
+        module_name = f'lib.modules.{config_custom_module}.{config_custom_module}'
+        _mod = importlib.import_module(module_name)
+        custom_worker = getattr(_mod, 'CustomWorker')
+        return custom_worker
+    except Exception as e:
+        print(f'exit, error: {e}')
+        exit(1)
+
+
+def check_config_url(url_module: str) -> Optional[Tuple[str, Tuple[str,str]]]:
+    try:
+        url_module_value = urlparse(url_module)
+        basic_auth = (url_module_value.username, url_module_value.password)
+        url = f'{url_module_value.scheme}:{url_module_value.path}'
+        if not all(basic_auth):
+            basic_auth = None
+        if url:
+            return url, basic_auth
+    except Exception as e:
+        print(f'exit, error: {e}')
+        exit(1)
 
 
 def return_user_agent() -> str:

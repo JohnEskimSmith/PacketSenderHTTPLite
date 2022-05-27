@@ -7,12 +7,15 @@ __status__ = "Dev"
 import asyncio
 import uvloop
 from aiofiles import open as aiofiles_open
-import importlib
+from typing import Optional, Tuple
+from pathlib import Path
 
 from lib.workers import get_async_writer, create_io_reader, TargetReader, TaskProducer, Executor, OutputPrinter, \
     TargetWorker
-from lib.util import parse_settings, parse_args
-from lib.core import Stats
+from lib.util import parse_settings, parse_args, check_config_url, load_custom_worker, download_module
+from lib.core import Stats, TargetConfig, AppConfig
+
+PROJ_ROOT = Path(__file__).parent
 
 
 async def main(target_settings, config):
@@ -27,17 +30,16 @@ async def main(target_settings, config):
 
     async with aiofiles_open(config.output_file, mode=config.write_mode) as file_with_results:
         writer_coroutine = get_async_writer(config)
-        if config.custom_module == 'default':
+        about_custom_module = config.custom_module
+        if config.url_custom_module:
+            url_auth: Optional[Tuple] = check_config_url(config.url_custom_module)
+            if url_auth:
+                about_custom_module = await download_module(url_auth, proj_root=PROJ_ROOT)
+        if about_custom_module == 'default':
             target_worker = TargetWorker(statistics, task_semaphore, queue_prints, config)
         else:
-            try:
-                module_name = f'lib.modules.{config.custom_module}.{config.custom_module}'
-                _mod = importlib.import_module(module_name)
-                CustomWorker = getattr(_mod, 'CustomWorker')
-                target_worker = CustomWorker(statistics, task_semaphore, queue_prints, config)
-            except Exception as e:
-                print(f'exit, error: {e}')
-                exit(1)
+            CustomWorker = load_custom_worker(about_custom_module)
+            target_worker = CustomWorker(statistics, task_semaphore, queue_prints, config)
 
         input_reader: TargetReader = create_io_reader(statistics, queue_input, target_settings, config)
         task_producer = TaskProducer(statistics, queue_input, queue_tasks, target_worker)
@@ -51,7 +53,8 @@ async def main(target_settings, config):
 
 if __name__ == '__main__':
     arguments = parse_args()
-    target_settings, config = parse_settings(arguments)
+    _configs: Tuple[TargetConfig, AppConfig] = parse_settings(arguments)
+    target_settings, config = _configs
     if arguments.use_uvloop:
         uvloop.install()
     asyncio.run(main(target_settings, config))

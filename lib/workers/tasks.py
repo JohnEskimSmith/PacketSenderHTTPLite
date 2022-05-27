@@ -6,7 +6,7 @@ from base64 import b64encode
 from hashlib import sha256, sha1, md5
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from ssl import _create_unverified_context as ssl_create_unverified_context
-from typing import Optional, Callable, Any, Coroutine, Dict
+from typing import Optional, Callable, Any, Coroutine
 from aiohttp import ClientSession, ClientTimeout, TCPConnector, ClientResponse, TraceConfig, AsyncResolver
 from aioconsole import ainput
 from aiofiles import open as aiofiles_open
@@ -18,9 +18,28 @@ from .factories import create_targets_http_protocol
 
 __all__ = ['QueueWorker', 'TargetReader', 'TargetFileReader', 'TargetStdinReader', 'TaskProducer',
            'Executor', 'OutputPrinter', 'TargetWorker', 'create_io_reader', 'get_async_writer',
-           'on_request_start', 'on_request_end', 'WrappedResponseClass']
+           'on_request_start', 'on_request_end', 'WrappedResponseClass', 'return_ip_from_deep']
 
 STOP_SIGNAL = b'check for end'
+
+
+def return_ip_from_deep(sess, response) -> str:
+    try:
+        ip_port = response.connection.transport.get_extra_info('peername')
+        if is_ip(ip_port[0]):
+            return ip_port[0]
+    except BaseException:
+        pass
+    try:
+        _tmp_conn_key = sess.connector._conns.items()
+        for k, v in _tmp_conn_key:
+            _h = v[0][0]
+            ip_port = _h.transport.get_extra_info('peername')
+            if is_ip(ip_port[0]):
+                return ip_port[0]
+    except BaseException:
+        pass
+    return ''
 
 
 class WrappedResponseClass(ClientResponse):
@@ -266,24 +285,6 @@ class TargetWorker:
         """
         сопрограмма, осуществляет подключение к Target, отправку и прием данных, формирует результата в виде dict
         """
-
-        def return_ip_from_deep(sess, response) -> str:
-            try:
-                ip_port = response.connection.transport.get_extra_info('peername')
-                if is_ip(ip_port[0]):
-                    return ip_port[0]
-            except BaseException:
-                pass
-            try:
-                _tmp_conn_key = sess.connector._conns.items()
-                for k, v in _tmp_conn_key:
-                    _h = v[0][0]
-                    ip_port = _h.transport.get_extra_info('peername')
-                    if is_ip(ip_port[0]):
-                        return ip_port[0]
-            except BaseException:
-                pass
-            return ''
 
         def update_line(json_record, target):
             json_record['ip'] = target.ip
