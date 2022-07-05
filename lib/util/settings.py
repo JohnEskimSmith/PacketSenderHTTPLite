@@ -12,12 +12,15 @@ from hashlib import md5 as haslib_md5
 from random import choice
 from ujson import loads as ujson_loads
 from .io import decode_base64_string
+from .net import is_ip
 from lib.core import return_payloads_from_files, AppConfig, TargetConfig, CONST_ANY_STATUS
 from itertools import cycle
 
 __all__ = ['parse_args', 'parse_settings', 'check_config_url', 'download_module', 'load_custom_worker']
 
 NAME_CUSTOM_WORKER_CLASS = 'CustomWorker'
+DEFAULT_NAME_SERVERS = '8.8.8.8,8.8.4.4'
+
 
 def parse_args():
 
@@ -44,11 +47,14 @@ def parse_args():
     parser.add_argument('--endpoint', dest='endpoint', type=str, default='/',
                         help='Send an HTTP request to an endpoint (default: /)')
     parser.add_argument('--use-https', dest='ssl_check', action='store_true')
+    parser.add_argument('--dns-servers', dest='dns_servers',  type=str, default=DEFAULT_NAME_SERVERS,
+                        help=f'set dns as IPv4 with comma. Default: {DEFAULT_NAME_SERVERS}')
     parser.add_argument('--user-agent', dest='user_agent', type=str, default='random',
                         help='Set a custom user agent (default: randomly selected from popular well-known agents)')
     parser.add_argument("--allow-redirects", dest='allow_redirects', action='store_true')
     parser.add_argument("--method", type=str, default="GET",
                         help='Set HTTP request method type (default: GET, available methods: GET, POST, HEAD)')
+
     # region about proxy
     parser.add_argument("--proxy", type=str, dest='proxy_connection_string',
                         help='proxy connection strings(;): "http://myproxy.com" or "http://user:pass@some.proxy.com"')
@@ -232,6 +238,19 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
     else:
         scheme = 'http'
 
+    try:
+        dns_values = args.dns_servers
+        dns_ipv4 = []
+        for value in dns_values.split(','):
+            if is_ip(value.strip()):
+                dns_ipv4.append(value.strip())
+    except Exception as exp:
+        print(f'errors with --dns-servers, set defaults: {DEFAULT_NAME_SERVERS}')
+        dns_ipv4 = DEFAULT_NAME_SERVERS.split(',')
+
+
+
+
     target_settings = TargetConfig(**{
         'port': args.port,
         'ssl_check': args.ssl_check,
@@ -255,6 +274,7 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         'senders': args.senders,
         'queue_sleep': args.queue_sleep,
         'statistics': args.statistics,
+        'dns_servers': dns_ipv4,
         'total_timeout': args.total_timeout,
         'input_file': input_file,
         'input_stdin': args.input_stdin,

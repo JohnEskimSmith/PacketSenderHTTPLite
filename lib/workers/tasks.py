@@ -6,7 +6,7 @@ from base64 import b64encode
 from hashlib import sha256, sha1, md5
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from ssl import _create_unverified_context as ssl_create_unverified_context
-from typing import Optional, Callable, Any, Coroutine
+from typing import Optional, Callable, Any, Coroutine, List
 from aiohttp import ClientSession, ClientTimeout, TCPConnector, ClientResponse, TraceConfig, AsyncResolver
 from aioconsole import ainput
 from aiofiles import open as aiofiles_open
@@ -302,7 +302,8 @@ class TargetWorker:
             trace_config.on_request_start.append(on_request_start)
             trace_config.on_request_end.append(on_request_end)
             # endregion
-            resolver = AsyncResolver(nameservers=['8.8.8.8', '8.8.4.4'])
+            nameservers: List[str] = self.app_config.dns_servers
+            resolver = AsyncResolver(nameservers=nameservers)
             # resolver = None
             # https://github.com/aio-libs/aiohttp/issues/2228  - closed
             if target.ssl_check:

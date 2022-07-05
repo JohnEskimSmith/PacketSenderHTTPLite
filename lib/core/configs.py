@@ -10,6 +10,7 @@ class AppConfig:
     total_timeout: int
     queue_sleep: int
     statistics: bool
+    dns_servers: List[str]
     input_stdin: str
     single_targets: str
     input_file: str
