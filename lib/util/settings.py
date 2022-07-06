@@ -3,7 +3,7 @@ import importlib
 from os import path
 from sys import stderr
 from aiofiles import open as aiofiles_open
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 from urllib.parse import urlparse
 from aiohttp import ClientSession as aiohttp_ClientSession, BasicAuth
 from pathlib import Path
@@ -22,7 +22,7 @@ NAME_CUSTOM_WORKER_CLASS = 'CustomWorker'
 DEFAULT_NAME_SERVERS = '8.8.8.8,8.8.4.4'
 
 
-def parse_args():
+def parse_args(custom_args: Optional[List[str]] = None):
 
     parser = argparse.ArgumentParser(description='HTTP(s) sender lite(asyncio)')
     parser.add_argument('-settings', type=str, help='path to file with settings (yaml)')
@@ -114,7 +114,8 @@ def parse_args():
     parser.add_argument('--generator-payloads', dest='generator_payloads', type=str,
                         help='name function of gen.payloads from Python module')
     parser.add_argument('--show-statistics', dest='statistics', action='store_true')
-    return parser.parse_args()
+    return parser.parse_args(custom_args)
+
 
 
 # noinspection PyBroadException

@@ -9,3 +9,5 @@ uvloop
 aiofiles
 urllib3
 aiodns
+msgpack
+aiobotocore
