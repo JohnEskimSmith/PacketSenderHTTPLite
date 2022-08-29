@@ -12,7 +12,7 @@ import ujson
 from aiofiles import open as aiofiles_open
 from typing import Optional, Tuple, List
 from pathlib import Path
-from os import unlink
+from os import unlink, environ as os_environ
 
 from lib.workers import get_async_writer, create_io_reader, TargetReader, TaskProducer, Executor, OutputPrinter, \
     TargetWorker
@@ -28,7 +28,8 @@ PROJ_ROOT = Path(__file__).parent
 
 async def main(target_settings: TargetConfig, config: AppConfig):
     # region cloud config
-    cloud_s3_config, cloud_sqs_config = await parse_cloud_env(config.output_file)
+    s3_endpoint_env = os_environ.get('endpoint')
+    cloud_s3_config, cloud_sqs_config = await parse_cloud_env(config.output_file, s3_endpoint=s3_endpoint_env)
     # endregion
 
     queue_input = asyncio.Queue()
@@ -65,21 +66,30 @@ async def main(target_settings: TargetConfig, config: AppConfig):
                          for worker in [input_reader, task_producer, executor, printer]]
         await asyncio.wait(running_tasks)
 
+    http_status = 0
     # region send file to S3 bucket
-    with open(config.output_file, 'rb') as outfile:
-        data = outfile.read()
-
-    client_s3 = cloud_s3_config['client']
-    bucket = cloud_s3_config['about_bucket']['bucket']
-    key_bucket = cloud_s3_config['about_bucket']['key']
-    resp_from_s3 = await client_s3.put_object(Bucket=bucket,
-                                              Key=key_bucket,
-                                              Body=data)
+    data = None
     try:
-        http_status = resp_from_s3['ResponseMetadata']['HTTPStatusCode']
+        file_size = Path(config.output_file).stat().st_size
     except Exception as exp:
-        http_status = 0
-        print(exp)
+        print(exp, flush=True)
+    else:
+        if file_size > 0:
+            with open(config.output_file, 'rb') as outfile:
+                data = outfile.read()
+    if data:
+        client_s3 = cloud_s3_config['client']
+        bucket = cloud_s3_config['about_bucket']['bucket']
+        key_bucket = cloud_s3_config['about_bucket']['key']
+
+        resp_from_s3 = await client_s3.put_object(Bucket=bucket,
+                                                  Key=key_bucket,
+                                                  Body=data)
+        try:
+            http_status = resp_from_s3['ResponseMetadata']['HTTPStatusCode']
+        except Exception as exp:
+            http_status = 0
+            print(exp)
     # endregion
 
     try:
@@ -97,21 +107,23 @@ async def main(target_settings: TargetConfig, config: AppConfig):
 
     # region sending to sqs about file saved to buckets
     if cloud_sqs_config:
-        message_sqs = {'bucket': bucket,
-                       'key': key_bucket,
-                       'timestamp': int(datetime.datetime.now().timestamp())}
+        if data:
+            message_sqs = {'bucket': bucket,
+                           'key': key_bucket,
+                           'timestamp': int(datetime.datetime.now().timestamp())}
 
-        body_message: str = ujson.dumps(message_sqs)
-        status = await cloud_sqs_config['client'].send_message(QueueUrl=cloud_sqs_config['queue_url'],
-                                                               MessageBody=body_message)
-        try:
-            status_code: int = status['ResponseMetadata']['HTTPStatusCode']
-            if status_code != 200:
-                print(f'SQS: errors: {status_code}')
-            else:
-                print(f'SQS sent: {bucket}/{key_bucket}')
-        except Exception as error_send:
-            print(f'SQS: error: {error_send}')
+            body_message: str = ujson.dumps(message_sqs)
+            status = await cloud_sqs_config['client'].send_message(QueueUrl=cloud_sqs_config['queue_url'],
+                                                                   MessageBody=body_message)
+            try:
+                status_code: int = status['ResponseMetadata']['HTTPStatusCode']
+                if status_code != 200:
+                    print(f'SQS: errors: {status_code}')
+                else:
+                    print(f'SQS sent: {bucket}/{key_bucket}')
+            except Exception as error_send:
+                print(f'SQS: error: {error_send}')
+
         try:
             await cloud_sqs_config['client'].close()
         except Exception as e:
