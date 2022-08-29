@@ -4,6 +4,7 @@ from abc import ABC
 from asyncio import Queue
 from base64 import b64encode
 from hashlib import sha256, sha1, md5
+from os import environ
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from ssl import _create_unverified_context as ssl_create_unverified_context
 from typing import Optional, Callable, Any, Coroutine, List
@@ -253,8 +254,12 @@ class OutputPrinter(QueueWorker):
             if self.output_file == '/dev/stdout':
                 await self.io.write(ujson_dumps(statistics).encode('utf-8') + b'\n')
             else:
-                async with aiofiles_open('/dev/stdout', mode='wb') as stats:
-                    await stats.write(ujson_dumps(statistics).encode('utf-8') + b'\n')
+                # dirty temp hack
+                if not environ.get('CLOUD'):
+                    async with aiofiles_open('/dev/stdout', mode='wb') as stats:
+                        await stats.write(ujson_dumps(statistics).encode('utf-8') + b'\n')
+                else:
+                    print(ujson_dumps(statistics), flush=True)
 
 
 async def on_request_start(session, trace_config_ctx, params):

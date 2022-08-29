@@ -22,7 +22,7 @@ def abort(message: str, exc: Exception = None, exit_code: int = 1):
     exit(exit_code)
 
 
-CONST_IO_FIELDS = {'input-file', 'output-file'}
+CONST_IO_FIELDS = ('input-file', 'output-file')
 
 
 def parse_sqs_message_yandex_msgpack(event: Dict) -> Optional[Tuple[Optional[Dict], str, str]]:
@@ -35,6 +35,7 @@ def parse_sqs_message_yandex_msgpack(event: Dict) -> Optional[Tuple[Optional[Dic
                     if data := payload.get('data'):
                         tmp_file = NamedTemporaryFile(delete=False, mode='wt')
                         tmp_file.write('\n'.join(data)+'\n')
+                        tmp_file.close()
                         return message_value.get('settings'), type_payload, tmp_file.name
             else:
                 pass
@@ -57,7 +58,7 @@ def create_default_info_for_routes_bucket(settings_s3: Dict) -> Dict:
     except:
         _name_task = space
     currentuuid = uuid4().hex
-    s3_prefix_key = f'{database}/{space}/{_name_task}_uuid_{currentuuid}.gzip'
+    s3_prefix_key = f'{database}/{space}/{_name_task}_uuid_{currentuuid}.njson'
     return {'bucket': CONST_SPECIAL_PREFIX_BUCKET + dest,
             'key': s3_prefix_key}
 
@@ -70,9 +71,8 @@ def create_args_list(settings: Dict,
             arguments_from_string.append(f'--{k}')
         else:
             arguments_from_string.append(f'--{k}={v}')
-    for value in zip(CONST_IO_FIELDS, files):
-        arguments_from_string.append(f'--{value[0]}={value[1]}')
-
+    arguments_from_string.append(f'--{CONST_IO_FIELDS[0]}={files[0]}')
+    arguments_from_string.append(f'--{CONST_IO_FIELDS[1]}={files[1]}')
     return arguments_from_string
 
 
@@ -92,7 +92,7 @@ def parse_args_from_sqs_message(event: Dict) -> Optional[List[str]]:
 
 
 async def parse_cloud_env(file_with_result: str,
-                          s3_endpoint: str = '/mongo/http/dns') -> Tuple[Dict, Optional[Dict]]:
+                          s3_endpoint: str = '/mongo/http/cloud') -> Tuple[Dict, Optional[Dict]]:
     # region client s3
     s3_out_struct = {'service_name': 's3',
                      'region_name': os_environ.get('region_name', 'ru-east-1'),

@@ -7,7 +7,7 @@ from lib.core import Target, load_python_generator_payloads_from_file, TargetCon
 from lib.util import is_ip, is_network, encode_files_payload
 from ujson import loads as ujson_loads
 from pickle import loads as pickle_loads
-RESERVED_CHAR = ';'  # for spliting endpoints, i don't want use narg
+RESERVED_CHAR = ';'  # for spliting endpoints, I don't want use narg
 
 
 def create_target_http_protocol(raw_str: str,
@@ -205,11 +205,11 @@ def create_targets_http_protocol(raw_str: str, target_settings: TargetConfig) ->
     """
     Функция для обработки и создания "целей"
     """
-    def detect_url(input_str: str):
+    def detect_url(input_str: str) -> bool:
         url_line = urlparse(input_str)
         host = url_line.netloc
         scheme = url_line.scheme
-        return host and scheme
+        return bool(host and scheme)
 
     def detect_domain(value) -> bool:
         """
@@ -242,7 +242,7 @@ def create_targets_http_protocol(raw_str: str, target_settings: TargetConfig) ->
         except (UnicodeError, AttributeError):
             return False
 
-    def detect_network(input_str: str):
+    def detect_network(input_str: str) -> bool:
         if input_str:
             return any([is_ip(input_str), is_network(input_str)])
 
