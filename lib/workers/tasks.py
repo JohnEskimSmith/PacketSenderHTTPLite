@@ -3,7 +3,9 @@ import asyncio
 from abc import ABC
 from asyncio import Queue
 from base64 import b64encode
+from datetime import datetime
 from hashlib import sha256, sha1, md5
+from ipaddress import IPv4Address
 from os import environ
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from ssl import _create_unverified_context as ssl_create_unverified_context
@@ -292,10 +294,23 @@ class TargetWorker:
         """
 
         def update_line(json_record, target):
-            json_record['ip'] = target.ip
-            # json_record['ip_v4_int'] = int(ip_address(target.ip))
-            # json_record['datetime'] = datetime.datetime.utcnow()
-            # json_record['port'] = int(target.port)
+            try:
+                json_record['ip'] = target.ip
+                json_record['meta'] = {}
+                try:
+                    json_record['meta']['ipv4'] = int(IPv4Address(target.ip))
+                except:
+                    pass
+                try:
+                    json_record['meta']['datetime'] = int(datetime.now().timestamp())
+                except:
+                    pass
+                try:
+                    json_record['meta']['port'] = int(target.port)
+                except:
+                    pass
+            except:
+                pass
             return json_record
 
         async with self.semaphore:
@@ -404,6 +419,12 @@ class TargetWorker:
                     if result:
                         if not result['ip']:
                             result['ip'] = return_ip_from_deep(session, response)
+                            if result['ip']:
+                                if result.get('meta'):
+                                    try:
+                                        result['meta']['ipv4'] = int(IPv4Address(result['ip']))
+                                    except:
+                                        pass
             except Exception as exp:
                 error_str = ''
                 try:

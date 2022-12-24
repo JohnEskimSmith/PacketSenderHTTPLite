@@ -29,29 +29,29 @@ def parse_args(custom_args: Optional[List[str]] = None):
     parser.add_argument('--stdin', dest='input_stdin', action='store_true', help='Read targets from stdin')
     parser.add_argument('-t', '--targets', nargs='+', type=str, default='', dest='single_targets',
                         help='Single targets: ipv4, CIDRs, urls')
-    parser.add_argument('-f', '--input-file', dest='input_file', type=str, help='path to file with targets')
-    parser.add_argument('-o', '--output-file', dest='output_file', type=str, help='path to file with results')
-    parser.add_argument('-s', '--senders', dest='senders', type=int, default=1024,
+    parser.add_argument('-f', '--input-file', type=str, help='path to file with targets')
+    parser.add_argument('-o', '--output-file', type=str, help='path to file with results')
+    parser.add_argument('-s', '--senders', type=int, default=1024,
                         help='Number of send coroutines to use (default: 1024)')
-    parser.add_argument('--use-uvloop', dest='use_uvloop', action='store_true')
-    parser.add_argument('--delete-custom', dest='delete_custom', action='store_true')  # TODO: rethink
-    parser.add_argument('--queue-sleep', dest='queue_sleep', type=int, default=1,
+    parser.add_argument('--use-uvloop', action='store_true')
+    parser.add_argument('--delete-custom', action='store_true')  # TODO: rethink
+    parser.add_argument('--queue-sleep', type=int, default=1,
                         help='Sleep duration if the queue is full, default 1 sec. Queue size == senders')
-    parser.add_argument('--max-size', dest='max_size', type=int, default=1024,
+    parser.add_argument('--max-size', type=int, default=1024,
                         help='Maximum total bytes(!) to read for a single host (default 1024)')
 
     parser.add_argument('--timeout', dest='total_timeout', type=int, default=5,
                         help='total timeout, seconds (default: 5)')
 
     parser.add_argument('-p', '--port', type=int, help='Specify port (default: 80)', default=80, required=True)
-    parser.add_argument('--endpoint', dest='endpoint', type=str, default='/',
+    parser.add_argument('--endpoint', type=str, default='/',
                         help='Send an HTTP request to an endpoint (default: /)')
     parser.add_argument('--use-https', dest='ssl_check', action='store_true')
-    parser.add_argument('--dns-servers', dest='dns_servers',  type=str, default=DEFAULT_NAME_SERVERS,
+    parser.add_argument('--dns-servers', type=str, default=DEFAULT_NAME_SERVERS,
                         help=f'set dns as IPv4 with comma. Default: {DEFAULT_NAME_SERVERS}')
-    parser.add_argument('--user-agent', dest='user_agent', type=str, default='random',
+    parser.add_argument('--user-agent', type=str, default='random',
                         help='Set a custom user agent (default: randomly selected from popular well-known agents)')
-    parser.add_argument("--allow-redirects", dest='allow_redirects', action='store_true')
+    parser.add_argument("--allow-redirects", action='store_true')
     parser.add_argument("--method", type=str, default="GET",
                         help='Set HTTP request method type (default: GET, available methods: GET, POST, HEAD)')
 
@@ -59,7 +59,7 @@ def parse_args(custom_args: Optional[List[str]] = None):
     parser.add_argument("--proxy", type=str, dest='proxy_connection_string',
                         help='proxy connection strings(;): "http://myproxy.com" or "http://user:pass@some.proxy.com"')
     parser.add_argument("--proxy-generator", type=str, dest='proxy_connection_generator', help='not implemented ')
-    parser.add_argument("--proxy-source", type=str, dest='proxy_source', help='not implemented')
+    parser.add_argument("--proxy-source", type=str, help='not implemented')
     # endregion
     # region add custom worker
     parser.add_argument('--module', dest='custom_module', type=str, default='default',
@@ -70,16 +70,16 @@ def parse_args(custom_args: Optional[List[str]] = None):
 
     # endregion
     # region add options
-    parser.add_argument('--without-base64', dest='without_base64', action='store_true')
-    parser.add_argument('--without-hashs', dest='without_hashs', action='store_true')
+    parser.add_argument('--without-base64', action='store_true')
+    parser.add_argument('--without-hashs', action='store_true')
     parser.add_argument('--without-cert', dest='without_certraw', action='store_true')
-    parser.add_argument('--full-headers', dest='full_headers', type=str, default=None, help='JSON as string')
+    parser.add_argument('--full-headers', type=str, default=None, help='JSON as string')
     # TODO: &
-    parser.add_argument('--full-headers-base64', dest='full_headers_base64',
+    parser.add_argument('--full-headers-base64',
                         type=str, default=None, help='not implemented')
 
-    parser.add_argument('--full-headers-hex', dest='full_headers_hex', type=str, default=None)
-    parser.add_argument('--full-cookies', dest='full_cookies',
+    parser.add_argument('--full-headers-hex', type=str, default=None)
+    parser.add_argument('--full-cookies',
                         type=str, default=None, help='http cookies as json string')
 
     parser.add_argument('--full-cookies-hex', dest='full_cookies_hex',
@@ -87,33 +87,32 @@ def parse_args(custom_args: Optional[List[str]] = None):
     # endregion
 
     # region filters
-    parser.add_argument('--single-contain', dest='single_contain', type=str,
+    parser.add_argument('--single-contain', type=str,
                         help='trying to find a substring in a response(set in base64)')
-    parser.add_argument('--single-contain-hex', dest='single_contain_hex', type=str,
+    parser.add_argument('--single-contain-hex', type=str,
                         help='trying to find a substring in a response bytes (set in bytes(hex))')
-    parser.add_argument('--single-contain-string', dest='single_contain_string', type=str,
+    parser.add_argument('--single-contain-string', type=str,
                         help='trying to find a substring in a response(set in str)')
-    parser.add_argument("--status-code", dest='status_code', type=int, default=CONST_ANY_STATUS,
+    parser.add_argument("--status-code", type=int, default=CONST_ANY_STATUS,
                         help='http status code, ex.: 200, 404')
 
-    parser.add_argument('--show-only-success', dest='show_only_success', action='store_true')
+    parser.add_argument('--show-only-success', action='store_true')
     # endregion
     parser.add_argument('--list-payloads', nargs='*', dest='list_payloads',
                         help='list payloads(bytes stored in files): file1 file2 file2', required=False)
-    parser.add_argument('--single-payload', dest='single_payload', type=str, help='single payload in BASE64 from bytes')
-    parser.add_argument('--single-payload-hex', dest='single_payload_hex', type=str,
+    parser.add_argument('--single-payload', type=str, help='single payload in BASE64 from bytes')
+    parser.add_argument('--single-payload-hex', type=str,
                         help='single payload in hex(bytes)')
-    parser.add_argument('--single-payload-pickle-hex', dest='single_payload_pickle_hex', type=str,
+    parser.add_argument('--single-payload-pickle-hex', type=str,
                         help='python pickle object in hex(bytes)')
-    parser.add_argument('--single-payload-type', dest='single_payload_type', type=str,
-                        default='DATA',
+    parser.add_argument('--single-payload-type', type=str, default='DATA',
                         help="single payload type: DATA(raw bin), JSON, "
                              "FILES(like at requests - Dictionary of 'filename': file-like-objects for multipart encoding upload)")
 
-    parser.add_argument('--python-payloads', dest='python_payloads', type=str, help='path to Python module')
-    parser.add_argument('--generator-payloads', dest='generator_payloads', type=str,
+    parser.add_argument('--python-payloads', type=str, help='path to Python module')
+    parser.add_argument('--generator-payloads', type=str,
                         help='name function of gen.payloads from Python module')
-    parser.add_argument('--show-statistics', dest='statistics', action='store_true')
+    parser.add_argument('--show-statistics', action='store_true')
     return parser.parse_args(custom_args)
 
 
@@ -250,8 +249,6 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
         dns_ipv4 = DEFAULT_NAME_SERVERS.split(',')
 
 
-
-
     target_settings = TargetConfig(**{
         'port': args.port,
         'ssl_check': args.ssl_check,
@@ -274,7 +271,7 @@ def parse_settings(args: argparse.Namespace) -> Tuple[TargetConfig, AppConfig]:
     app_settings = AppConfig(**{
         'senders': args.senders,
         'queue_sleep': args.queue_sleep,
-        'statistics': args.statistics,
+        'statistics': args.show_statistics,
         'dns_servers': dns_ipv4,
         'total_timeout': args.total_timeout,
         'input_file': input_file,
