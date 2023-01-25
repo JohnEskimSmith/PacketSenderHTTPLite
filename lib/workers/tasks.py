@@ -457,8 +457,9 @@ class TargetWorker:
                         if self.app_config.status_code != response_status:
                             error_str = f'status code: {response_status} is not equal to filter: {self.app_config.status_code}'
                             result = create_error_template(target, error_str=error_str, status_string='success-not-need-status')
-                            self.stats.count_good -= 1
-                            self.stats.count_error += 1
+                            if self.stats:
+                                self.stats.count_good -= 1
+                                self.stats.count_error += 1
                 line = None
                 try:
                     if self.success_only:
