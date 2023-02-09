@@ -418,7 +418,7 @@ class TargetWorker:
                                 result = create_error_template(target, error_str='', status_string='success-not-contain')
                     if result:
                         if not result['ip']:
-                            result['ip'] = return_ip_from_deep(session, response)
+                            result['ip']: str = return_ip_from_deep(session, response)
                             if result['ip']:
                                 if result.get('meta'):
                                     try:
