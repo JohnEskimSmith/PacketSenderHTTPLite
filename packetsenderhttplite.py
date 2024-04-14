@@ -5,10 +5,13 @@ __license__ = "GPLv3"
 __status__ = "Dev"
 
 import asyncio
+from pathlib import Path
+from sys import version_info
+
+
 import uvloop
 from aiofiles import open as aiofiles_open
-from typing import Optional, Tuple
-from pathlib import Path
+
 
 from lib.workers import get_async_writer, create_io_reader, TargetReader, TaskProducer, Executor, OutputPrinter, \
     TargetWorker
@@ -21,7 +24,7 @@ DEFAULT_CUSTOM_MODULES_DIR = 'custom_modules'
 PROJ_ROOT = Path(__file__).parent
 
 
-async def main(target_settings, config):
+async def start(target_settings, config):
 
     queue_input = asyncio.Queue()
     queue_tasks = asyncio.Queue()
@@ -36,7 +39,7 @@ async def main(target_settings, config):
         about_custom_module = config.custom_module
         directory_modules = DEFAULT_MODULES_DIR
         if config.url_custom_module:
-            url_auth: Optional[Tuple] = check_config_url(config.url_custom_module)
+            url_auth: tuple | None = check_config_url(config.url_custom_module)
             if url_auth:
                 about_custom_module = await download_module(url_auth,
                                                             proj_root=PROJ_ROOT,
@@ -60,8 +63,14 @@ async def main(target_settings, config):
 
 if __name__ == '__main__':
     arguments = parse_args()
-    _configs: Tuple[TargetConfig, AppConfig] = parse_settings(arguments)
+    _configs: tuple[TargetConfig, AppConfig] = parse_settings(arguments)
     target_settings, config = _configs
     if arguments.use_uvloop:
-        uvloop.install()
-    asyncio.run(main(target_settings, config))
+        if version_info >= (3, 11):
+            with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:
+                runner.run(start(target_settings, config))
+        else:
+            uvloop.install()
+            start(target_settings, config)
+    else:
+        asyncio.run(start(target_settings, config))

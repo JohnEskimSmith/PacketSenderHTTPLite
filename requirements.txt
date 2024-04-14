@@ -1,5 +1,5 @@
 aioconsole
-ujson==1.35
+orjson
 async_timeout
 hexdump
 aiofiles
