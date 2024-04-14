@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from re import compile as re_compile
 from lib.core import Target, load_python_generator_payloads_from_file, TargetConfig, PayloadGenerator
 from lib.util import is_ip, is_network, encode_files_payload
-from ujson import loads as ujson_loads
+from orjson import loads as orjson_loads
 from pickle import loads as pickle_loads
 RESERVED_CHAR = ';'  # for spliting endpoints, I don't want use narg
 

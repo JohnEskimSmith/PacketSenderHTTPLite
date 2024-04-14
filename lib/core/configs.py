@@ -1,6 +1,6 @@
 from collections import namedtuple
 from dataclasses import dataclass
-from typing import List, Dict
+
 CONST_ANY_STATUS = -20000  # no matter what
 
 
@@ -10,7 +10,7 @@ class AppConfig:
     total_timeout: int
     queue_sleep: int
     statistics: bool
-    dns_servers: List[str]
+    dns_servers: list[str]
     input_stdin: str
     single_targets: str
     input_file: str
@@ -32,13 +32,13 @@ class TargetConfig:
     port: int
     total_timeout: int
     ssl_check: bool
-    list_payloads: List[bytes]
+    list_payloads: list[bytes]
     python_payloads: str
     generator_payloads: str
-    search_values: List[bytes]
+    search_values: list[bytes]
     max_size: int
-    headers: Dict
-    cookies: Dict
+    headers: dict
+    cookies: dict
     scheme: str
     endpoint: str
     method: str

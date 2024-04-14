@@ -4,31 +4,49 @@ from abc import ABC
 from asyncio import Queue
 from base64 import b64encode
 from datetime import datetime
-from hashlib import sha256, sha1, md5
+from hashlib import md5, sha1, sha256
 from ipaddress import IPv4Address
 from os import environ
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from ssl import _create_unverified_context as ssl_create_unverified_context
-from typing import Optional, Callable, Any, Coroutine, List
-from aiohttp import ClientSession, ClientTimeout, TCPConnector, ClientResponse, TraceConfig, AsyncResolver
+from typing import Any, Callable, Coroutine
+
 from aioconsole import ainput
 from aiofiles import open as aiofiles_open
-from ujson import dumps as ujson_dumps
-from lib.core import create_template_struct, convert_bytes_to_cert, create_error_template, Stats, AppConfig, \
-    Target, TargetConfig, CONST_ANY_STATUS
-from lib.util import access_dot_path, is_ip, filter_bytes, write_to_file, write_to_stdout, read_http_content
+from aiohttp import (AsyncResolver, ClientResponse, ClientSession,
+                     ClientTimeout, TCPConnector, TraceConfig)
+from lib.core import (CONST_ANY_STATUS, AppConfig, Stats, Target, TargetConfig,
+                      convert_bytes_to_cert, create_error_template,
+                      create_template_struct)
+from lib.util import (access_dot_path, filter_bytes, is_ip, read_http_content,
+                      write_to_file, write_to_stdout)
+from orjson import dumps as orjson_dumps
+
 from .factories import create_targets_http_protocol
 
-__all__ = ['QueueWorker', 'TargetReader', 'TargetFileReader', 'TargetStdinReader', 'TaskProducer',
-           'Executor', 'OutputPrinter', 'TargetWorker', 'create_io_reader', 'get_async_writer',
-           'on_request_start', 'on_request_end', 'WrappedResponseClass', 'return_ip_from_deep']
+__all__ = [
+    "QueueWorker",
+    "TargetReader",
+    "TargetFileReader",
+    "TargetStdinReader",
+    "TaskProducer",
+    "Executor",
+    "OutputPrinter",
+    "TargetWorker",
+    "create_io_reader",
+    "get_async_writer",
+    "on_request_start",
+    "on_request_end",
+    "WrappedResponseClass",
+    "return_ip_from_deep",
+]
 
-STOP_SIGNAL = b'check for end'
+STOP_SIGNAL = b"END"
 
 
 def return_ip_from_deep(sess, response) -> str:
     try:
-        ip_port = response.connection.transport.get_extra_info('peername')
+        ip_port = response.connection.transport.get_extra_info("peername")
         if is_ip(ip_port[0]):
             return ip_port[0]
     except BaseException:
@@ -37,12 +55,12 @@ def return_ip_from_deep(sess, response) -> str:
         _tmp_conn_key = sess.connector._conns.items()
         for k, v in _tmp_conn_key:
             _h = v[0][0]
-            ip_port = _h.transport.get_extra_info('peername')
+            ip_port = _h.transport.get_extra_info("peername")
             if is_ip(ip_port[0]):
                 return ip_port[0]
     except BaseException:
         pass
-    return ''
+    return ""
 
 
 class WrappedResponseClass(ClientResponse):
@@ -55,7 +73,7 @@ class WrappedResponseClass(ClientResponse):
 
     async def start(self, connection, read_until_eof=False):
         try:
-            self._ssl_prot = connection.transport.get_extra_info('ssl_object')
+            self._ssl_prot = connection.transport.get_extra_info("ssl_object")
             self._peer_cert = self._ssl_prot.getpeercert(binary_form=True)
         except Exception as e:
             pass
@@ -77,7 +95,7 @@ class WrappedResponseClass(ClientResponse):
 
 
 class QueueWorker(metaclass=abc.ABCMeta):
-    def __init__(self, stats: Optional[Stats] = None):
+    def __init__(self, stats: Stats | None = None):
         self.stats = stats
 
     @abc.abstractmethod
@@ -90,7 +108,14 @@ class InputProducer:
     Produces raw messages for workers
     """
 
-    def __init__(self, stats: Stats, input_queue: Queue, target_conf: TargetConfig, send_limit: int, queue_sleep: int):
+    def __init__(
+        self,
+        stats: Stats,
+        input_queue: Queue,
+        target_conf: TargetConfig,
+        send_limit: int,
+        queue_sleep: int,
+    ):
         self.stats = stats
         self.input_queue = input_queue
         self.target_conf = target_conf
@@ -99,7 +124,9 @@ class InputProducer:
 
     async def send(self, linein):
         if linein:
-            targets = create_targets_http_protocol(linein, self.target_conf)  # generator
+            targets = create_targets_http_protocol(
+                linein, self.target_conf
+            )  # generator
             if targets:
                 for target in targets:
                     check_queue = True
@@ -108,7 +135,7 @@ class InputProducer:
                         if size_queue < self.send_limit:
                             if self.stats:
                                 self.stats.count_input += 1
-                            self.input_queue.put_nowait(target)
+                            await self.input_queue.put(target)
                             check_queue = False
                         else:
                             await asyncio.sleep(self.queue_sleep)
@@ -133,12 +160,14 @@ class TargetFileReader(TargetReader):
     Reads raw input messages from text file
     """
 
-    def __init__(self, stats: Stats, input_queue: Queue, producer: InputProducer, file_path: str):
+    def __init__(
+        self, stats: Stats, input_queue: Queue, producer: InputProducer, file_path: str
+    ):
         super().__init__(stats, input_queue, producer)
         self.file_path = file_path
 
     async def run(self):
-        async with aiofiles_open(self.file_path, mode='rt') as f:
+        async with aiofiles_open(self.file_path, mode="rt") as f:
             async for line in f:
                 linein = line.strip()
                 if linein:
@@ -152,7 +181,13 @@ class TargetSingleReader(TargetReader):
     Reads --target input messages from args
     """
 
-    def __init__(self, stats: Stats, input_queue: Queue, producer: InputProducer, single_targets: str):
+    def __init__(
+        self,
+        stats: Stats,
+        input_queue: Queue,
+        producer: InputProducer,
+        single_targets: str,
+    ):
         super().__init__(stats, input_queue, producer)
         self.single_targets = single_targets
 
@@ -190,7 +225,9 @@ class TaskProducer(QueueWorker):
     Creates tasks for tasks queue
     """
 
-    def __init__(self, stats: Stats, in_queue: Queue, tasks_queue: Queue, worker: 'TargetWorker'):
+    def __init__(
+        self, stats: Stats, in_queue: Queue, tasks_queue: Queue, worker: "TargetWorker"
+    ):
         super().__init__(stats)
         self.in_queue = in_queue
         self.tasks_queue = tasks_queue
@@ -226,8 +263,7 @@ class Executor(QueueWorker):
             if task == STOP_SIGNAL:
                 await self.out_queue.put(STOP_SIGNAL)
                 break
-            if task:
-                await task
+            await task
 
 
 class OutputPrinter(QueueWorker):
@@ -235,7 +271,9 @@ class OutputPrinter(QueueWorker):
     Takes results from results queue and put them to output
     """
 
-    def __init__(self, output_file: str, stats: Stats, in_queue: Queue, io, async_writer) -> None:
+    def __init__(
+        self, output_file: str, stats: Stats, in_queue: Queue, io, async_writer
+    ) -> None:
         super().__init__(stats)
         self.in_queue = in_queue
         self.async_writer = async_writer
@@ -253,15 +291,15 @@ class OutputPrinter(QueueWorker):
         await asyncio.sleep(0.5)
         if self.stats:
             statistics = self.stats.dict()
-            if self.output_file == '/dev/stdout':
-                await self.io.write(ujson_dumps(statistics).encode('utf-8') + b'\n')
+            if self.output_file == "/dev/stdout":
+                await self.io.write(orjson_dumps(statistics) + b"\n")
             else:
                 # dirty temp hack
-                if not environ.get('CLOUD'):
-                    async with aiofiles_open('/dev/stdout', mode='wb') as stats:
-                        await stats.write(ujson_dumps(statistics).encode('utf-8') + b'\n')
+                if not environ.get("CLOUD"):
+                    async with aiofiles_open("/dev/stdout", mode="wb") as stats:
+                        await stats.write(orjson_dumps(statistics) + b"\n")
                 else:
-                    print(ujson_dumps(statistics), flush=True)
+                    print(orjson_dumps(statistics).decode(), flush=True)
 
 
 async def on_request_start(session, trace_config_ctx, params):
@@ -271,7 +309,7 @@ async def on_request_start(session, trace_config_ctx, params):
 async def on_request_end(session, trace_config_ctx, params):
     elapsed = asyncio.get_event_loop().time() - trace_config_ctx.start
     if trace_config_ctx.trace_request_ctx:
-        trace_config_ctx.trace_request_ctx['duration'] = round(elapsed, 4)
+        trace_config_ctx.trace_request_ctx["duration"] = round(elapsed, 4)
 
 
 class TargetWorker:
@@ -279,13 +317,19 @@ class TargetWorker:
     Runs payload against target
     """
 
-    def __init__(self, stats: Stats, semaphore: asyncio.Semaphore, output_queue: asyncio.Queue, app_config: AppConfig):
+    def __init__(
+        self,
+        stats: Stats,
+        semaphore: asyncio.Semaphore,
+        output_queue: asyncio.Queue,
+        app_config: AppConfig,
+    ):
         self.stats = stats
         self.semaphore = semaphore
         self.output_queue = output_queue
         self.app_config = app_config
         self.success_only = app_config.show_only_success
-        self.trace_request_ctx = {'request': True}
+        self.trace_request_ctx = {"request": True}
 
     # noinspection PyBroadException
     async def do(self, target: Target):
@@ -293,20 +337,65 @@ class TargetWorker:
         сопрограмма, осуществляет подключение к Target, отправку и прием данных, формирует результата в виде dict
         """
 
+        def update_for_history(json_record: dict, response_chains) -> dict:
+            try:
+                if access_dot_path(json_record, "data.http.result.response"):
+                    data = []
+                    for chain in response_chains:
+                        try:
+                            record = dict()
+                            record["cookies"] = dict(chain.cookies)
+                            record["headers"] = dict(chain.headers)
+                            record["host"] = chain.host
+                            record["method"] = chain.method
+                            record["status"] = chain.status
+                            record["real_url"] = chain.real_url
+                            data.append(record)
+                        except:
+                            pass
+                    if data:
+                        json_record["data"]["http"]["result"]["response"][
+                            "history"
+                        ] = data
+
+                else:
+                    json_record["data"]["http"]["result"] = {}
+                    json_record["data"]["http"]["result"]["response"] = {}
+                    data = []
+                    for chain in response_chains:
+                        try:
+                            record = dict()
+                            record["cookies"] = dict(chain.cookies)
+                            record["headers"] = dict(chain.headers)
+                            record["host"] = chain.host
+                            record["method"] = chain.method
+                            record["status"] = chain.status
+                            record["real_url"] = dict(chain.real_url)
+                            data.append(record)
+                        except Exception as exp:
+                            print(exp)
+                    if data:
+                        json_record["data"]["http"]["result"]["response"][
+                            "history"
+                        ] = data
+            except:
+                pass
+            return json_record
+
         def update_line(json_record, target):
             try:
-                json_record['ip'] = target.ip
-                json_record['meta'] = {}
+                json_record["ip"] = target.ip
+                json_record["meta"] = {}
                 try:
-                    json_record['meta']['ipv4'] = int(IPv4Address(target.ip))
+                    json_record["meta"]["ipv4"] = int(IPv4Address(target.ip))
                 except:
                     pass
                 try:
-                    json_record['meta']['datetime'] = int(datetime.now().timestamp())
+                    json_record["meta"]["datetime"] = int(datetime.now().timestamp())
                 except:
                     pass
                 try:
-                    json_record['meta']['port'] = int(target.port)
+                    json_record["meta"]["port"] = int(target.port)
                 except:
                     pass
             except:
@@ -322,111 +411,166 @@ class TargetWorker:
             trace_config.on_request_start.append(on_request_start)
             trace_config.on_request_end.append(on_request_end)
             # endregion
-            nameservers: List[str] = self.app_config.dns_servers
+            nameservers: list[str] = self.app_config.dns_servers
             resolver = AsyncResolver(nameservers=nameservers)
             # resolver = None
             # https://github.com/aio-libs/aiohttp/issues/2228  - closed
             if target.ssl_check:
 
-                conn = TCPConnector(ssl=False,
-                                    family=2, # need set current family (only IPv4)
-                                    limit_per_host=0,
-                                    resolver=resolver)
+                conn = TCPConnector(
+                    ssl=False,
+                    family=2,  # need set current family (only IPv4)
+                    limit_per_host=0,
+                    resolver=resolver,
+                )
                 session = ClientSession(
                     timeout=timeout,
                     connector=conn,
                     response_class=WrappedResponseClass,
-                    trace_configs=[trace_config])
+                    trace_configs=[trace_config],
+                )
                 simple_zero_sleep = 0.250
             else:
                 simple_zero_sleep = 0.001
-                session = ClientSession(connector=TCPConnector(limit_per_host=0,
-                                                               family=2,  # need set current family (only IPv4)
-                                                               resolver=resolver),
-                                        timeout=timeout,
-                                        trace_configs=[trace_config])
+                session = ClientSession(
+                    connector=TCPConnector(
+                        limit_per_host=0,
+                        family=2,  # need set current family (only IPv4)
+                        resolver=resolver,
+                    ),
+                    timeout=timeout,
+                    trace_configs=[trace_config],
+                )
             selected_proxy_connection = None
             try:
                 selected_proxy_connection = next(self.app_config.proxy_connections)
             except:
                 pass
             try:
-                async with session.request(target.method,
-                                           target.url,
-                                           timeout=timeout,
-                                           headers=target.headers,
-                                           cookies=target.cookies,
-                                           allow_redirects=target.allow_redirects,
-                                           data=target.payload,
-                                           proxy=selected_proxy_connection,
-                                           trace_request_ctx=self.trace_request_ctx) as response:
+                async with session.request(
+                    target.method,
+                    target.url,
+                    timeout=timeout,
+                    headers=target.headers,
+                    cookies=target.cookies,
+                    allow_redirects=target.allow_redirects,
+                    data=target.payload,
+                    proxy=selected_proxy_connection,
+                    trace_request_ctx=self.trace_request_ctx,
+                ) as response:
                     _default_record = create_template_struct(target)
                     if target.ssl_check:
                         cert = convert_bytes_to_cert(response.peer_cert)
                         if not self.app_config.without_certraw:
-                            _default_record['data']['http']['result']['response']['request']['tls_log']['handshake_log'][
-                                'server_certificates']['certificate']['raw'] = b64encode(response.peer_cert).decode(
-                                'utf-8')
+                            _default_record["data"]["http"]["result"]["response"][
+                                "request"
+                            ]["tls_log"]["handshake_log"]["server_certificates"][
+                                "certificate"
+                            ][
+                                "raw"
+                            ] = b64encode(
+                                response.peer_cert
+                            ).decode(
+                                "utf-8"
+                            )
                         if cert:
-                            _default_record['data']['http']['result']['response']['request']['tls_log'][
-                                'handshake_log']['server_certificates']['certificate']['parsed'] = cert
-                    _default_record['data']['http']['status'] = "success"
-                    _default_record['data']['http']['result']['response']['status_code'] = response.status
+                            _default_record["data"]["http"]["result"]["response"][
+                                "request"
+                            ]["tls_log"]["handshake_log"]["server_certificates"][
+                                "certificate"
+                            ][
+                                "parsed"
+                            ] = cert
+                    _default_record["data"]["http"]["status"] = "success"
+                    _default_record["data"]["http"]["result"]["response"][
+                        "status_code"
+                    ] = response.status
                     # region
                     _header = {}
                     for key in response.headers:
-                        _header[key.lower().replace('-', '_')] = response.headers.getall(key)
-                    _default_record['data']['http']['result']['response']['headers'] = _header
+                        _header[key.lower().replace("-", "_")] = (
+                            response.headers.getall(key)
+                        )
+                    _default_record["data"]["http"]["result"]["response"][
+                        "headers"
+                    ] = _header
                     # endregion
-                    if target.method in ['GET', 'POST', 'PUT', 'DELETE', 'UPDATE']:
+                    if target.method in ["GET", "POST", "PUT", "DELETE", "UPDATE"]:
                         buffer = b""
                         try:
-                            read_c = asyncio.wait_for(read_http_content(response, n=target.max_size),
-                                                      timeout=target.total_timeout)
+                            read_c = asyncio.wait_for(
+                                read_http_content(response, n=target.max_size),
+                                timeout=target.total_timeout,
+                            )
                             buffer = await read_c
                         except Exception as e:
                             pass
                         else:
                             if filter_bytes(buffer, target):
-                                _default_record['data']['http']['result']['response']['content_length'] = len(buffer)
-                                _default_record['data']['http']['result']['response']['body'] = ''
+                                _default_record["data"]["http"]["result"]["response"][
+                                    "content_length"
+                                ] = len(buffer)
+                                _default_record["data"]["http"]["result"]["response"][
+                                    "body"
+                                ] = ""
                                 try:
-                                    _default_record['data']['http']['result']['response']['body'] = buffer.decode()
+                                    _default_record["data"]["http"]["result"][
+                                        "response"
+                                    ]["body"] = buffer.decode()
                                 except Exception as e:
                                     pass
                                 if not self.app_config.without_base64:
                                     try:
-                                        _base64_data = b64encode(buffer).decode('utf-8')
-                                        _default_record['data']['http']['result']['response']['body_raw'] = _base64_data
+                                        _base64_data = b64encode(buffer).decode("utf-8")
+                                        _default_record["data"]["http"]["result"][
+                                            "response"
+                                        ]["body_raw"] = _base64_data
                                     except Exception as e:
                                         pass
                                 if not self.app_config.without_hashs:
                                     try:
-                                        hashs = {'sha256': sha256,
-                                                 'sha1': sha1,
-                                                 'md5': md5}
+                                        hashs = {
+                                            "sha256": sha256,
+                                            "sha1": sha1,
+                                            "md5": md5,
+                                        }
                                         for namehash, func in hashs.items():
                                             hm = func()
                                             hm.update(buffer)
-                                            _default_record['data']['http']['result']['response'][f'body_{namehash}'] = hm.hexdigest()
+                                            _default_record["data"]["http"]["result"][
+                                                "response"
+                                            ][f"body_{namehash}"] = hm.hexdigest()
                                     except Exception as e:
                                         pass
                                 result = update_line(_default_record, target)
                             else:
                                 # TODO: добавить статус success-not-contain для обозначения того,
                                 #  что сервис найден, но не попал под фильтр?
-                                result = create_error_template(target, error_str='', status_string='success-not-contain')
+                                result = create_error_template(
+                                    target,
+                                    error_str="",
+                                    status_string="success-not-contain",
+                                )
                     if result:
-                        if not result['ip']:
-                            result['ip']: str = return_ip_from_deep(session, response)
-                            if result['ip']:
-                                if result.get('meta'):
+                        if not result["ip"]:
+                            result["ip"]: str = return_ip_from_deep(session, response)
+                            if result["ip"]:
+                                if result.get("meta"):
                                     try:
-                                        result['meta']['ipv4'] = int(IPv4Address(result['ip']))
+                                        result["meta"]["ipv4"] = int(
+                                            IPv4Address(result["ip"])
+                                        )
                                     except:
                                         pass
+                    history = None
+                    try:
+                        history = (
+                            response.history[:-1] if len(response.history) > 1 else None
+                        )
+                    except:
+                        pass
             except Exception as exp:
-                error_str = ''
+                error_str = ""
                 try:
                     error_str = exp.strerror
                 except:
@@ -442,9 +586,12 @@ class TargetWorker:
                 except:
                     pass
             if result:
-                if 'duration' in self.trace_request_ctx:
-                    request_duration = self.trace_request_ctx['duration']
-                    result['data']['http']['duration'] = request_duration
+                # if history:
+                #     result = update_for_history(result, history)
+
+                if "duration" in self.trace_request_ctx:
+                    request_duration = self.trace_request_ctx["duration"]
+                    result["data"]["http"]["duration"] = request_duration
                 success = access_dot_path(result, "data.http.status")
                 if self.stats:
                     if success == "success":
@@ -452,11 +599,17 @@ class TargetWorker:
                     else:
                         self.stats.count_error += 1
                 if not (self.app_config.status_code == CONST_ANY_STATUS):
-                    response_status = access_dot_path(result, 'data.http.result.response.status_code')
+                    response_status = access_dot_path(
+                        result, "data.http.result.response.status_code"
+                    )
                     if response_status:
                         if self.app_config.status_code != response_status:
-                            error_str = f'status code: {response_status} is not equal to filter: {self.app_config.status_code}'
-                            result = create_error_template(target, error_str=error_str, status_string='success-not-need-status')
+                            error_str = f"status code: {response_status} is not equal to filter: {self.app_config.status_code}"
+                            result = create_error_template(
+                                target,
+                                error_str=error_str,
+                                status_string="success-not-need-status",
+                            )
                             if self.stats:
                                 self.stats.count_good -= 1
                                 self.stats.count_error += 1
@@ -464,11 +617,11 @@ class TargetWorker:
                 try:
                     if self.success_only:
                         if success == "success":
-                            line = ujson_dumps(result)
+                            line = orjson_dumps(result).decode()
                     else:
-                        line = ujson_dumps(result)
-                except Exception:
-                    pass
+                        line = orjson_dumps(result).decode()
+                except Exception as exp:
+                    print(exp)
                 if line:
                     await self.output_queue.put(line)
 
@@ -483,24 +636,34 @@ class TargetWorker:
                 pass
 
 
-def create_io_reader(stats: Stats, queue_input: Queue, target: TargetConfig, app_config: AppConfig) -> TargetReader:
-    message_producer = InputProducer(stats, queue_input, target, app_config.senders - 1, app_config.queue_sleep)
+def create_io_reader(
+    stats: Stats, queue_input: Queue, target: TargetConfig, app_config: AppConfig
+) -> TargetReader:
+    message_producer = InputProducer(
+        stats, queue_input, target, app_config.senders - 1, app_config.queue_sleep
+    )
     if app_config.input_stdin:
         return TargetStdinReader(stats, queue_input, message_producer)
     if app_config.single_targets:
-        return TargetSingleReader(stats, queue_input, message_producer, app_config.single_targets)
+        return TargetSingleReader(
+            stats, queue_input, message_producer, app_config.single_targets
+        )
     elif app_config.input_file:
-        return TargetFileReader(stats, queue_input, message_producer, app_config.input_file)
+        return TargetFileReader(
+            stats, queue_input, message_producer, app_config.input_file
+        )
     else:
         # TODO : rethink...
-        print("""errors, set input source:
+        print(
+            """errors, set input source:
          --stdin read targets from stdin;
          -t,--targets set targets, see -h;
-         -f,--input-file read from file with targets, see -h""")
+         -f,--input-file read from file with targets, see -h"""
+        )
         exit(1)
 
 
 def get_async_writer(app_settings: AppConfig) -> Callable[[Any, str], Coroutine]:
-    if app_settings.write_mode == 'a':
+    if app_settings.write_mode == "a":
         return write_to_file
     return write_to_stdout

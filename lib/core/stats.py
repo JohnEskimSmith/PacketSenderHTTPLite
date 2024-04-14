@@ -2,8 +2,6 @@ from datetime import datetime
 
 __all__ = ['Stats']
 
-from typing import Optional
-
 
 class Stats:
     """
@@ -15,7 +13,7 @@ class Stats:
         self.count_good = 0
         self.count_error = 0
 
-    def dict(self, stopped: Optional[datetime] = None) -> dict:
+    def dict(self, stopped: datetime | None = None) -> dict:
         stopped = stopped or datetime.utcnow()
         return {
             'duration': (stopped - self.start_time).total_seconds(),
