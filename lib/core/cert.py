@@ -1,5 +1,4 @@
-from hashlib import sha256, sha1, md5
-
+from hashlib import md5, sha1, sha256
 
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -67,7 +66,7 @@ def convert_bytes_to_cert(bytes_cert: bytes) -> dict | None:
     result["subject"] = {}
     for i in atr:
         for q in i._attributes:
-            result['subject'][q.oid._name] = [q.value]
+            result["subject"][q.oid._name] = [q.value]
     if len(result.get("serialNumber", "")) == 16:
         result["serialNumber"] = "00" + result["serialNumber"]
     try:
