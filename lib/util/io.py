@@ -1,10 +1,12 @@
 from base64 import b64decode
-from aiohttp import ClientConnectionError, ClientResponse
-from lib.core import Target
 from collections.abc import Mapping
+from os.path import basename as os_path_basename
+
+from aiohttp import ClientConnectionError, ClientResponse
 from urllib3.fields import RequestField
 from urllib3.filepost import encode_multipart_formdata
-from os.path import basename as os_path_basename
+
+from lib.core import Target
 
 __all__ = [
     "write_to_stdout",

@@ -7,20 +7,41 @@ from datetime import datetime
 from hashlib import md5, sha1, sha256
 from ipaddress import IPv4Address
 from os import environ
+
 # noinspection PyUnresolvedReferences,PyProtectedMember
 from ssl import _create_unverified_context as ssl_create_unverified_context
 from typing import Any, Callable, Coroutine
 
 from aioconsole import ainput
 from aiofiles import open as aiofiles_open
-from aiohttp import (AsyncResolver, ClientResponse, ClientSession,
-                     ClientTimeout, TCPConnector, TraceConfig)
-from lib.core import (CONST_ANY_STATUS, AppConfig, Stats, Target, TargetConfig,
-                      convert_bytes_to_cert, create_error_template,
-                      create_template_struct)
-from lib.util import (access_dot_path, filter_bytes, is_ip, read_http_content,
-                      write_to_file, write_to_stdout)
+from aiohttp import (
+    AsyncResolver,
+    ClientResponse,
+    ClientSession,
+    ClientTimeout,
+    TCPConnector,
+    TraceConfig,
+)
 from orjson import dumps as orjson_dumps
+
+from lib.core import (
+    CONST_ANY_STATUS,
+    AppConfig,
+    Stats,
+    Target,
+    TargetConfig,
+    convert_bytes_to_cert,
+    create_error_template,
+    create_template_struct,
+)
+from lib.util import (
+    access_dot_path,
+    filter_bytes,
+    is_ip,
+    read_http_content,
+    write_to_file,
+    write_to_stdout,
+)
 
 from .factories import create_targets_http_protocol
 

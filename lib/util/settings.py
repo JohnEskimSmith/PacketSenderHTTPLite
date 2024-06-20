@@ -13,9 +13,14 @@ from urllib.parse import urlparse
 from aiofiles import open as aiofiles_open
 from aiohttp import BasicAuth
 from aiohttp import ClientSession as aiohttp_ClientSession
-from lib.core import (CONST_ANY_STATUS, AppConfig, TargetConfig,
-                      return_payloads_from_files)
 from orjson import loads as orjson_loads
+
+from lib.core import (
+    CONST_ANY_STATUS,
+    AppConfig,
+    TargetConfig,
+    return_payloads_from_files,
+)
 
 from .io import decode_base64_string
 from .net import is_ip
