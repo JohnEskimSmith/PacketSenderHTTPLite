@@ -34,7 +34,7 @@ def convert_bytes_to_cert(bytes_cert: bytes) -> dict | None:
         result["validity"]["start"] = result["validity"]["start_datetime"].strftime(
             "%Y-%m-%dT%H:%M:%SZ"
         )
-    except Exception:
+    except Exception as exp:
         result["validity"] = {}
         result["validity"]["end_datetime"] = None
         result["validity"]["start_datetime"] = None
